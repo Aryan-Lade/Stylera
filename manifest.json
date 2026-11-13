@@ -1,0 +1,54 @@
+{
+  "manifest_version": 3,
+  "name": "Stylera - Real-Time Virtual Try-On",
+  "version": "0.1.0",
+  "description": "Shop and try on clothes, sunglasses, hats, shoes & jewelry in real-time with your webcam on any shopping site.",
+  "permissions": [
+    "storage",
+    "contextMenus",
+    "activeTab",
+    "sidePanel"
+  ],
+  "host_permissions": [
+    "*://*.myntra.com/*",
+    "*://*.ajio.com/*",
+    "*://*.amazon.in/*",
+    "*://*.flipkart.com/*",
+    "*://*.nykaa.com/*",
+    "*://*.hm.com/*",
+    "*://*.zara.com/*",
+    "https://*/*"
+  ],
+  "background": {
+    "service_worker": "src/background/index.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "Launch Stylera Try-On",
+    "default_icon": "icons/icon.svg"
+  },
+  "icons": {
+    "128": "icons/icon.svg"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["src/content/index.js"],
+      "css": ["src/content/styles.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "src/tryon-app/index.html",
+        "assets/*",
+        "models/*"
+      ],
+      "matches": ["<all_urls>"]
+    }
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+  }
+}

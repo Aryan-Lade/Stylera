@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <linearGradient id="stylera-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ec4899" />
+      <stop offset="100%" stop-color="#be185d" />
+    </linearGradient>
+  </defs>
+  <rect width="128" height="128" rx="28" fill="url(#stylera-grad)" />
+  <path d="M64 26 L73 47 L94 56 L73 65 L64 86 L55 65 L34 56 L55 47 Z" fill="#ffffff" />
+  <circle cx="88" cy="88" r="14" fill="#ffffff" opacity="0.9" />
+  <path d="M88 80 L90 85 L95 87 L90 89 L88 94 L86 89 L81 87 L86 85 Z" fill="#db2777" />
+</svg>
