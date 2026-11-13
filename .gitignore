@@ -1,0 +1,12 @@
+node_modules/
+dist/
+dist-zip/
+.vite/
+*.local
+.DS_Store
+Thumbs.db
+coverage/
+*.log
+temp.py
+playwright-report/
+test-results/
