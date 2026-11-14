@@ -132,3 +132,5 @@
     transform: translateY(0);
   }
 }
+
+/* Performance: user-select none during active drag */
