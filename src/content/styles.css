@@ -1,0 +1,134 @@
+/* Stylera Content Script Styles */
+.stylera-launcher-btn {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 2147483640;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: linear-gradient(135deg, #ec4899 0%, #be185d 100%);
+  color: #ffffff;
+  border: none;
+  border-radius: 9999px;
+  padding: 12px 20px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  box-shadow: 0 4px 14px rgba(236, 72, 153, 0.4);
+  cursor: pointer;
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s;
+}
+
+.stylera-launcher-btn:hover {
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 0 6px 20px rgba(236, 72, 153, 0.5);
+}
+
+.stylera-modal-container {
+  position: fixed;
+  top: 40px;
+  right: 40px;
+  width: 440px;
+  height: 680px;
+  min-width: 320px;
+  min-height: 480px;
+  max-width: 90vw;
+  max-height: 90vh;
+  z-index: 2147483646;
+  border-radius: 16px;
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+  background: #090d16;
+  display: flex;
+  flex-direction: column;
+  transition: height 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.stylera-modal-container.stylera-minimized {
+  height: 48px !important;
+  min-height: 48px !important;
+}
+
+.stylera-drag-handle {
+  width: 100%;
+  height: 12px;
+  background: #0f172a;
+  cursor: grab;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.stylera-drag-handle:active {
+  cursor: grabbing;
+}
+
+.stylera-grip-dots {
+  width: 32px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(148, 163, 184, 0.4);
+}
+
+.stylera-tryon-frame {
+  width: 100%;
+  flex: 1;
+  border: none;
+  background: transparent;
+}
+
+.stylera-resize-handle {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 16px;
+  height: 16px;
+  cursor: se-resize;
+  z-index: 10;
+  background: linear-gradient(135deg, transparent 50%, rgba(236, 72, 153, 0.6) 50%);
+  border-bottom-right-radius: 16px;
+}
+/* Hover Try-On Button Injected on Shopping Sites */
+.stylera-hover-tryon-btn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(8px);
+  color: #f472b6;
+  border: 1px solid rgba(244, 114, 182, 0.4);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  animation: stylera-fade-in 0.15s ease-out;
+}
+
+.stylera-hover-tryon-btn:hover {
+  background: #db2777;
+  color: #ffffff;
+  border-color: #ec4899;
+  transform: scale(1.05);
+}
+
+@keyframes stylera-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
