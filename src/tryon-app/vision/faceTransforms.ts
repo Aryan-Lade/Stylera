@@ -97,3 +97,5 @@ export function computeFaceItemTransform(
     quaternion,
   };
 }
+
+// Perspective alignment for eyewear and headwear anchors
