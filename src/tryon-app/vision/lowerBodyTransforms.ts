@@ -134,3 +134,5 @@ export function computeFootwearPair(
     },
   };
 }
+
+// Auto-mirror footwear geometry for left and right foot tracking
