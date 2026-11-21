@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Myntra Fashion Store - Mock Testing</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; margin: 0; padding: 20px; background: #fafbfc; }
+    .header { padding: 15px 0; border-bottom: 1px solid #e0e0e0; display: flex; align-items: center; justify-content: space-between; }
+    .breadcrumbs-container { font-size: 12px; color: #777; margin: 15px 0; }
+    .product-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 20px; }
+    .product-base { border: 1px solid #eaeaea; border-radius: 8px; overflow: hidden; background: #fff; position: relative; padding: 10px; cursor: grab; }
+    .product-base img { width: 100%; height: 260px; object-fit: cover; border-radius: 4px; }
+    .product-brand { font-weight: bold; font-size: 14px; margin-top: 8px; color: #282c3f; }
+    .product-product { font-size: 12px; color: #535766; margin-top: 4px; }
+    .product-discountedPrice { font-weight: bold; font-size: 14px; color: #282c3f; margin-top: 6px; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h2>Myntra Fashion Shopping</h2>
+  </div>
+
+  <div class="breadcrumbs-container">
+    Home / Men / Topwear / T-shirts
+  </div>
+
+  <div class="product-grid">
+    <!-- Product 1: T-Shirt -->
+    <div class="product-base" id="product-tshirt">
+      <img
+        src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200' viewBox='0 0 200 200'%3E%3Cpath d='M40 50 L70 20 L130 20 L160 50 L140 80 L125 70 L125 180 L75 180 L75 70 L60 80 Z' fill='%23ec4899'/%3E%3C/svg%3E"
+        alt="Roadster Solid Crew Neck Cotton T-shirt"
+      />
+      <div class="product-brand">Roadster</div>
+      <div class="product-product">Men Solid Pure Cotton Round Neck T-shirt</div>
+      <div class="product-discountedPrice">Rs. 499</div>
+    </div>
+
+    <!-- Product 2: Sunglasses -->
+    <div class="product-base" id="product-sunglasses">
+      <img
+        src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='100' viewBox='0 0 200 100'%3E%3Crect x='20' y='20' width='60' height='40' rx='10' fill='%231e293b'/%3E%3Crect x='120' y='20' width='60' height='40' rx='10' fill='%231e293b'/%3E%3Cline x1='80' y1='35' x2='120' y2='35' stroke='%23475569' stroke-width='6'/%3E%3C/svg%3E"
+        alt="Ray-Ban Polarized Aviator Sunglasses"
+      />
+      <div class="product-brand">Ray-Ban</div>
+      <div class="product-product">Unisex Polarized Aviator Sunglasses</div>
+      <div class="product-discountedPrice">Rs. 5,499</div>
+    </div>
+
+    <!-- Product 3: Shoes -->
+    <div class="product-base" id="product-shoes">
+      <img
+        src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='120' viewBox='0 0 200 120'%3E%3Cpath d='M20 70 Q40 30 90 40 Q130 50 170 80 L170 95 L20 95 Z' fill='%230284c7'/%3E%3C/svg%3E"
+        alt="Puma Smash v2 Low-Top Sneakers"
+      />
+      <div class="product-brand">Puma</div>
+      <div class="product-product">Men Smash v2 Leather Low-Top Casual Sneakers</div>
+      <div class="product-discountedPrice">Rs. 2,999</div>
+    </div>
+  </div>
+</body>
+</html>
