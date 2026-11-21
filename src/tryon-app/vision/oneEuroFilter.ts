@@ -112,5 +112,3 @@ export class LandmarkSmoother2D {
     this.yFilters.clear();
   }
 }
-
-// Verified stable 30fps landmark smoothing parameters

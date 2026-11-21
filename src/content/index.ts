@@ -268,5 +268,3 @@ if (document.readyState === 'loading') {
   setupDragInterceptors();
   setupHoverButtons();
 }
-
-// Close modal when Escape key is pressed

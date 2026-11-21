@@ -359,5 +359,3 @@ export const CameraViewport: React.FC<CameraViewportProps> = ({ children }) => {
     </div>
   );
 };
-
-// Track out-of-frame body parts and prompt user

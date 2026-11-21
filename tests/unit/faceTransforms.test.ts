@@ -49,5 +49,3 @@ describe('Face Transform Tests', () => {
     expect(hatResult.centerY).toBeLessThan(faceResult.centerY);
   });
 });
-
-// Validated yaw and pitch bounds for 3D face accessories
