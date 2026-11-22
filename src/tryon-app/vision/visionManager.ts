@@ -12,6 +12,8 @@ class VisionManager {
   private isInitializing = false;
   private isReady = false;
   private initError: string | null = null;
+  private lastTimestamp = 0;
+  private lastSuccessfulDetectionTime = 0;
 
   public async initialize(): Promise<boolean> {
     if (this.isReady) return true;
@@ -20,62 +22,91 @@ class VisionManager {
     this.isInitializing = true;
     this.initError = null;
 
+    // 1. Determine local extension URLs (offline, bypasses CSP restrictions)
+    let wasmLocation = '/wasm';
+    let poseModelPath = '/models/pose_landmarker_lite.task';
+    let faceModelPath = '/models/face_landmarker.task';
+
+    if (typeof chrome !== 'undefined' && chrome.runtime?.getURL) {
+      try {
+        wasmLocation = chrome.runtime.getURL('wasm');
+        poseModelPath = chrome.runtime.getURL('models/pose_landmarker_lite.task');
+        faceModelPath = chrome.runtime.getURL('models/face_landmarker.task');
+      } catch {
+        // fallback
+      }
+    }
+
     try {
-      // Load Mediapipe Tasks Vision WASM from Google CDN
-      const vision = await FilesetResolver.forVisionTasks(
-        'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm'
-      );
+      console.log('[Stylera Vision] Initializing WASM from:', wasmLocation);
+      const vision = await FilesetResolver.forVisionTasks(wasmLocation);
+
+      // Initialize Face Landmarker first (Head, Eyes, Nose, 3D Matrix)
+      try {
+        this.faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
+          baseOptions: {
+            modelAssetPath: faceModelPath,
+            delegate: 'GPU',
+          },
+          runningMode: 'VIDEO',
+          numFaces: 1,
+          minFaceDetectionConfidence: 0.45,
+          minFacePresenceConfidence: 0.45,
+          minTrackingConfidence: 0.45,
+          outputFaceBlendshapes: false,
+          outputFacialTransformationMatrixes: true,
+        });
+      } catch (faceGpuErr) {
+        console.warn('[Stylera Vision] Face GPU init failed, trying CPU:', faceGpuErr);
+        this.faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
+          baseOptions: {
+            modelAssetPath: faceModelPath,
+            delegate: 'CPU',
+          },
+          runningMode: 'VIDEO',
+          numFaces: 1,
+          outputFacialTransformationMatrixes: true,
+        });
+      }
 
       // Initialize Pose Landmarker (Upper + Lower Body)
-      this.poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
-        baseOptions: {
-          modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task',
-          delegate: 'GPU',
-        },
-        runningMode: 'VIDEO',
-        numPoses: 1,
-        minPoseDetectionConfidence: 0.5,
-        minPosePresenceConfidence: 0.5,
-        minTrackingConfidence: 0.5,
-        outputSegmentationMasks: true,
-      });
-
-      // Initialize Face Landmarker (Head, Face Mesh, 3D Transformation Matrix)
-      this.faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
-        baseOptions: {
-          modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task',
-          delegate: 'GPU',
-        },
-        runningMode: 'VIDEO',
-        numFaces: 1,
-        minFaceDetectionConfidence: 0.5,
-        minFacePresenceConfidence: 0.5,
-        minTrackingConfidence: 0.5,
-        outputFaceBlendshapes: false,
-        outputFacialTransformationMatrixes: true,
-      });
-
-      this.isReady = true;
-      this.isInitializing = false;
-      console.log('[Stylera Vision] Vision Models (Pose + Face) successfully loaded with GPU acceleration');
-      return true;
-    } catch (err: any) {
-      console.warn('[Stylera Vision] GPU delegate init error, falling back to CPU:', err);
       try {
-        const vision = await FilesetResolver.forVisionTasks(
-          'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm'
-        );
-
         this.poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
           baseOptions: {
-            modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task',
+            modelAssetPath: poseModelPath,
+            delegate: 'GPU',
+          },
+          runningMode: 'VIDEO',
+          numPoses: 1,
+          minPoseDetectionConfidence: 0.45,
+          minPosePresenceConfidence: 0.45,
+          minTrackingConfidence: 0.45,
+          outputSegmentationMasks: true,
+        });
+      } catch (poseGpuErr) {
+        console.warn('[Stylera Vision] Pose GPU init failed, trying CPU:', poseGpuErr);
+        this.poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
+          baseOptions: {
+            modelAssetPath: poseModelPath,
             delegate: 'CPU',
           },
           runningMode: 'VIDEO',
           numPoses: 1,
         });
+      }
 
-        this.faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
+      this.isReady = true;
+      this.isInitializing = false;
+      console.log('[Stylera Vision] MediaPipe Vision Models (Face + Pose) successfully initialized on-device!');
+      return true;
+    } catch (err: any) {
+      console.warn('[Stylera Vision] Local initialization error, attempting CDN fallback:', err);
+      try {
+        const cdnVision = await FilesetResolver.forVisionTasks(
+          'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm'
+        );
+
+        this.faceLandmarker = await FaceLandmarker.createFromOptions(cdnVision, {
           baseOptions: {
             modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task',
             delegate: 'CPU',
@@ -85,13 +116,22 @@ class VisionManager {
           outputFacialTransformationMatrixes: true,
         });
 
+        this.poseLandmarker = await PoseLandmarker.createFromOptions(cdnVision, {
+          baseOptions: {
+            modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task',
+            delegate: 'CPU',
+          },
+          runningMode: 'VIDEO',
+          numPoses: 1,
+        });
+
         this.isReady = true;
         this.isInitializing = false;
-        console.log('[Stylera Vision] Vision Models loaded with CPU fallback');
+        console.log('[Stylera Vision] CDN fallback initialized successfully');
         return true;
       } catch (fallbackErr: any) {
         console.error('[Stylera Vision] Vision initialization completely failed:', fallbackErr);
-        this.initError = fallbackErr.message || 'Failed to load MediaPipe models';
+        this.initError = fallbackErr.message || 'Failed to initialize vision models';
         this.isInitializing = false;
         return false;
       }
@@ -103,26 +143,44 @@ class VisionManager {
       return { poseResult: null, faceResult: null, timestamp };
     }
 
+    // MediaPipe requires strictly monotonically increasing timestamp
+    let safeTimestamp = Math.floor(timestamp);
+    if (safeTimestamp <= this.lastTimestamp) {
+      safeTimestamp = this.lastTimestamp + 1;
+    }
+    this.lastTimestamp = safeTimestamp;
+
     let poseResult: PoseLandmarkerResult | null = null;
     let faceResult: FaceLandmarkerResult | null = null;
 
     try {
-      if (this.poseLandmarker) {
-        poseResult = this.poseLandmarker.detectForVideo(videoElement, timestamp);
+      if (this.faceLandmarker) {
+        faceResult = this.faceLandmarker.detectForVideo(videoElement, safeTimestamp);
       }
-    } catch (err) {
-      // skip dropped frame
+    } catch {
+      // frame skip
     }
 
     try {
-      if (this.faceLandmarker) {
-        faceResult = this.faceLandmarker.detectForVideo(videoElement, timestamp);
+      if (this.poseLandmarker) {
+        poseResult = this.poseLandmarker.detectForVideo(videoElement, safeTimestamp);
       }
-    } catch (err) {
-      // skip dropped frame
+    } catch {
+      // frame skip
     }
 
-    return { poseResult, faceResult, timestamp };
+    if (
+      (faceResult?.faceLandmarks && faceResult.faceLandmarks.length > 0) ||
+      (poseResult?.landmarks && poseResult.landmarks.length > 0)
+    ) {
+      this.lastSuccessfulDetectionTime = performance.now();
+    }
+
+    return { poseResult, faceResult, timestamp: safeTimestamp };
+  }
+
+  public hasRecentDetection(): boolean {
+    return performance.now() - this.lastSuccessfulDetectionTime < 1000;
   }
 
   public getStatus() {

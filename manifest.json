@@ -43,7 +43,8 @@
       "resources": [
         "src/tryon-app/index.html",
         "assets/*",
-        "models/*"
+        "models/*",
+        "wasm/*"
       ],
       "matches": ["<all_urls>"]
     }
