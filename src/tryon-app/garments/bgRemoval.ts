@@ -1,7 +1,14 @@
 /**
- * On-Device Background Removal & Cutout Engine with IndexedDB Caching
- * Uses boundary-connected flood fill and anti-aliased edge feathering
+ * On-Device Background Removal & Model Wearer Isolation Engine
+ * Features:
+ * 1. AI Model-Wearer Detection: Automatically isolates glasses, hats, or clothing from human models
+ * 2. Skin-tone Chromaticity Keying: Eliminates model's face, eyes, and skin behind lenses
+ * 3. 4-Perimeter Flood Fill: Removes e-commerce solid white/studio background
+ * 4. Anti-Aliased Edge Feathering: Smooth, artifact-free boundary cutouts
  */
+
+import { GarmentCategory } from '../../shared/types';
+import { visionManager } from '../vision/visionManager';
 
 const DB_NAME = 'StyleraModelCache';
 const STORE_NAME = 'cutouts';
@@ -49,10 +56,161 @@ export async function setCachedCutout(key: string, dataUrl: string): Promise<voi
 }
 
 /**
- * Removes uniform or noisy e-commerce solid white/light background via border flood fill
- * and feathers boundaries to create an ultra-clean RGBA cutout
+ * Isolates eyeglasses / sunglasses from a model's face:
+ * - Crops exact eye/temple bounding box
+ * - Keys out model's skin, eyelids, and eye sclera
+ * - Retains crisp frames and transparent lenses
  */
-export async function removeBackgroundClient(imageUrl: string): Promise<string> {
+export function isolateEyewearFromFace(
+  canvas: HTMLCanvasElement,
+  landmarks: Array<{ x: number; y: number; z: number }> | null
+): string {
+  const w = canvas.width;
+  const h = canvas.height;
+
+  let minX = 0;
+  let maxX = w;
+  let minY = 0;
+  let maxY = h;
+
+  if (landmarks && landmarks.length >= 468) {
+    const leftEye = landmarks[33];
+    const rightEye = landmarks[263];
+    const leftTemple = landmarks[234] || leftEye;
+    const rightTemple = landmarks[454] || rightEye;
+    const noseBridge = landmarks[168] || landmarks[6];
+    const browLeft = landmarks[70] || landmarks[107] || noseBridge;
+    const browRight = landmarks[300] || landmarks[336] || noseBridge;
+    const noseBase = landmarks[164] || landmarks[2];
+
+    const eyeSpan = Math.hypot((rightEye.x - leftEye.x) * w, (rightEye.y - leftEye.y) * h);
+    const centerX = noseBridge.x * w;
+    const centerY = noseBridge.y * h;
+
+    const boxWidth = Math.max(eyeSpan * 1.55, Math.abs((rightTemple.x - leftTemple.x) * w) * 1.08);
+    const topY = Math.min(browLeft.y, browRight.y, noseBridge.y) * h;
+    const bottomY = noseBase ? noseBase.y * h : (centerY + eyeSpan * 0.45);
+
+    minX = Math.max(0, Math.floor(centerX - boxWidth / 2));
+    maxX = Math.min(w, Math.ceil(centerX + boxWidth / 2));
+    minY = Math.max(0, Math.floor(topY - eyeSpan * 0.16));
+    maxY = Math.min(h, Math.ceil(bottomY + eyeSpan * 0.15));
+  } else {
+    // Heuristic crop around upper center of image where glasses reside on portrait models
+    minX = Math.floor(w * 0.10);
+    maxX = Math.ceil(w * 0.90);
+    minY = Math.floor(h * 0.15);
+    maxY = Math.ceil(h * 0.55);
+  }
+
+  const cropW = Math.max(10, maxX - minX);
+  const cropH = Math.max(10, maxY - minY);
+
+  const cropCanvas = document.createElement('canvas');
+  cropCanvas.width = cropW;
+  cropCanvas.height = cropH;
+  const cropCtx = cropCanvas.getContext('2d');
+  if (!cropCtx) return canvas.toDataURL('image/png');
+
+  // Draw cropped eyewear region
+  cropCtx.drawImage(canvas, minX, minY, cropW, cropH, 0, 0, cropW, cropH);
+  const imgData = cropCtx.getImageData(0, 0, cropW, cropH);
+  const d = imgData.data;
+
+  // Key out skin tones, eye sclera, and light studio backgrounds
+  for (let i = 0; i < d.length; i += 4) {
+    const r = d[i];
+    const g = d[i + 1];
+    const b = d[i + 2];
+
+    const brightness = (r + g + b) / 3;
+    const maxDiff = Math.max(Math.abs(r - g), Math.abs(g - b), Math.abs(r - b));
+
+    // 1. Studio white / light gray background around model
+    if (brightness > 228 || (brightness > 210 && maxDiff < 15)) {
+      d[i + 3] = 0;
+      continue;
+    }
+
+    // 2. YCbCr Human Skin Tone model
+    const cb = 128 - 0.168736 * r - 0.331264 * g + 0.5 * b;
+    const cr = 128 + 0.5 * r - 0.418688 * g - 0.081312 * b;
+
+    const isSkin =
+      cb >= 72 && cb <= 134 &&
+      cr >= 130 && cr <= 178 &&
+      r > g && g >= b &&
+      (r - g) >= 8 &&
+      brightness > 60; // Do not clear dark frames
+
+    // 3. Eye sclera (whites of eyes behind clear lenses)
+    const isEyeWhite = brightness > 185 && maxDiff < 22 && r > 150;
+
+    if (isSkin || isEyeWhite) {
+      d[i + 3] = 0; // Transparent
+    }
+  }
+
+  cropCtx.putImageData(imgData, 0, 0);
+  return cropCanvas.toDataURL('image/png');
+}
+
+/**
+ * Isolates headwear (cap, hat, beanie) from model's head
+ */
+export function isolateHeadwearFromFace(
+  canvas: HTMLCanvasElement,
+  landmarks: Array<{ x: number; y: number; z: number }>
+): string {
+  const w = canvas.width;
+  const h = canvas.height;
+
+  const browY = Math.min(landmarks[70].y, landmarks[300].y, landmarks[10].y) * h;
+  const cropH = Math.max(10, Math.floor(browY + h * 0.05));
+
+  const cropCanvas = document.createElement('canvas');
+  cropCanvas.width = w;
+  cropCanvas.height = cropH;
+  const cropCtx = cropCanvas.getContext('2d');
+  if (!cropCtx) return canvas.toDataURL('image/png');
+
+  cropCtx.drawImage(canvas, 0, 0, w, cropH, 0, 0, w, cropH);
+  return cropCanvas.toDataURL('image/png');
+}
+
+/**
+ * Isolates upper-body clothing (t-shirt, shirt, jacket) from model's head
+ */
+export function isolateUpperBodyFromFace(
+  canvas: HTMLCanvasElement,
+  landmarks: Array<{ x: number; y: number; z: number }>
+): string {
+  const w = canvas.width;
+  const h = canvas.height;
+
+  const chinY = landmarks[152].y * h;
+  const startY = Math.max(0, Math.floor(chinY + h * 0.02));
+  const cropH = h - startY;
+
+  const cropCanvas = document.createElement('canvas');
+  cropCanvas.width = w;
+  cropCanvas.height = cropH;
+  const cropCtx = cropCanvas.getContext('2d');
+  if (!cropCtx) return canvas.toDataURL('image/png');
+
+  cropCtx.drawImage(canvas, 0, startY, w, cropH, 0, 0, w, cropH);
+  return cropCanvas.toDataURL('image/png');
+}
+
+/**
+ * Removes uniform or noisy e-commerce solid white/light background via border flood fill
+ * and feathers boundaries to create an ultra-clean RGBA cutout.
+ * When a model wearing the garment is detected, isolates the target wearable item.
+ */
+export async function removeBackgroundClient(
+  imageUrl: string,
+  category?: GarmentCategory
+): Promise<string> {
   if (typeof window === 'undefined' || typeof Image === 'undefined') {
     return imageUrl;
   }
@@ -62,18 +220,19 @@ export async function removeBackgroundClient(imageUrl: string): Promise<string> 
     return imageUrl;
   }
 
-  const cached = await getCachedCutout(imageUrl);
+  const cacheKey = `${imageUrl}_${category || 'default'}`;
+  const cached = await getCachedCutout(cacheKey);
   if (cached) return cached;
 
   return new Promise((resolve) => {
     const timeout = setTimeout(() => {
       resolve(imageUrl);
-    }, 2000);
+    }, 3000);
 
     const img = new Image();
     img.crossOrigin = 'anonymous';
 
-    img.onload = () => {
+    img.onload = async () => {
       clearTimeout(timeout);
       try {
         const canvas = document.createElement('canvas');
@@ -89,10 +248,54 @@ export async function removeBackgroundClient(imageUrl: string): Promise<string> 
         canvas.height = h;
 
         ctx.drawImage(img, 0, 0, w, h);
+
+        // Check if image contains a human model wearing the item
+        let faceLandmarks: Array<{ x: number; y: number; z: number }> | null = null;
+        try {
+          faceLandmarks = await visionManager.detectFaceOnStaticImage(canvas);
+        } catch {
+          // fallback
+        }
+
+        // If human model face is detected in the image:
+        if (faceLandmarks && faceLandmarks.length >= 468) {
+          if (category === 'sunglasses/eyeglasses') {
+            const isolatedUrl = isolateEyewearFromFace(canvas, faceLandmarks);
+            setCachedCutout(cacheKey, isolatedUrl);
+            resolve(isolatedUrl);
+            return;
+          } else if (category === 'cap/hat/beanie') {
+            const isolatedUrl = isolateHeadwearFromFace(canvas, faceLandmarks);
+            setCachedCutout(cacheKey, isolatedUrl);
+            resolve(isolatedUrl);
+            return;
+          } else if (
+            category === 't-shirt' ||
+            category === 'shirt' ||
+            category === 'jacket/coat/blazer' ||
+            category === 'hoodie/sweatshirt' ||
+            category === 'top'
+          ) {
+            const isolatedUrl = isolateUpperBodyFromFace(canvas, faceLandmarks);
+            setCachedCutout(cacheKey, isolatedUrl);
+            resolve(isolatedUrl);
+            return;
+          }
+        }
+
+        // Fallback for eyewear if faceLandmarks weren't ready, but aspect ratio indicates a portrait model
+        if (category === 'sunglasses/eyeglasses' && h > w * 1.1) {
+          const isolatedUrl = isolateEyewearFromFace(canvas, null);
+          setCachedCutout(cacheKey, isolatedUrl);
+          resolve(isolatedUrl);
+          return;
+        }
+
+        // Standard flood-fill background removal for standalone flat-lay products
         const imgData = ctx.getImageData(0, 0, w, h);
         const data = imgData.data;
 
-        // 1. Sample perimeter border pixels to determine true background color
+        // Sample perimeter border pixels to determine true background color
         let sumR = 0, sumG = 0, sumB = 0;
         let sampleCount = 0;
 
@@ -118,7 +321,6 @@ export async function removeBackgroundClient(imageUrl: string): Promise<string> 
         const avgG = sumG / sampleCount;
         const avgB = sumB / sampleCount;
 
-        // E-commerce background color distance test
         const isBgColor = (pxR: number, pxG: number, pxB: number) => {
           const dr = Math.abs(pxR - avgR);
           const dg = Math.abs(pxG - avgG);
@@ -126,20 +328,17 @@ export async function removeBackgroundClient(imageUrl: string): Promise<string> 
           const dist = dr + dg + db;
           const brightness = (pxR + pxG + pxB) / 3;
 
-          // If border is bright white/off-white (typical of Myntra/Ajio product shots)
           if (avgR > 220 && avgG > 220 && avgB > 220) {
             return (brightness > 215 && dist < 65) || brightness > 248;
           }
           return dist < 45;
         };
 
-        // 2. Connected-component flood fill (BFS) starting from all border pixels
         const visited = new Uint8Array(w * h);
         const queue = new Int32Array(w * h);
         let head = 0;
         let tail = 0;
 
-        // Seed with all border pixels
         for (let x = 0; x < w; x++) {
           const topIdx = x;
           const botIdx = (h - 1) * w + x;
@@ -166,7 +365,6 @@ export async function removeBackgroundClient(imageUrl: string): Promise<string> 
           }
         }
 
-        // BFS expansion
         while (head < tail) {
           const curr = queue[head++];
           const cx = curr % w;
@@ -190,26 +388,24 @@ export async function removeBackgroundClient(imageUrl: string): Promise<string> 
           }
         }
 
-        // 3. Apply transparency to visited background pixels
         for (let p = 0; p < w * h; p++) {
           if (visited[p]) {
-            data[p * 4 + 3] = 0; // Alpha 0
+            data[p * 4 + 3] = 0;
           }
         }
 
-        // 4. Edge anti-aliasing / feathering: smooth 1-pixel boundary
+        // Edge anti-aliasing / feathering
         for (let y = 1; y < h - 1; y++) {
           for (let x = 1; x < w - 1; x++) {
             const idx = y * w + x;
             if (!visited[idx]) {
-              // Check if neighboring pixel is transparent
               const hasTransNeighbor =
                 visited[idx - 1] || visited[idx + 1] || visited[idx - w] || visited[idx + w];
               if (hasTransNeighbor) {
                 const pxIdx = idx * 4;
                 const brightness = (data[pxIdx] + data[pxIdx + 1] + data[pxIdx + 2]) / 3;
                 if (brightness > 200) {
-                  data[pxIdx + 3] = Math.floor(data[pxIdx + 3] * 0.6); // Soft feather
+                  data[pxIdx + 3] = Math.floor(data[pxIdx + 3] * 0.6);
                 }
               }
             }
@@ -219,9 +415,7 @@ export async function removeBackgroundClient(imageUrl: string): Promise<string> 
         ctx.putImageData(imgData, 0, 0);
         const cutoutUrl = canvas.toDataURL('image/png');
 
-        // Cache result asynchronously
-        setCachedCutout(imageUrl, cutoutUrl);
-
+        setCachedCutout(cacheKey, cutoutUrl);
         resolve(cutoutUrl);
       } catch {
         resolve(imageUrl);

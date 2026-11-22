@@ -97,7 +97,7 @@ test.describe('Stylera Extension E2E Smoke & Real-Time Try-On Flow', () => {
       await enableCameraBtn.click();
 
       // Verify video stream becomes LIVE
-      const liveIndicator = tryonPage.locator('text=LIVE');
+      const liveIndicator = tryonPage.getByText('LIVE', { exact: true });
       await expect(liveIndicator).toBeVisible({ timeout: 10000 });
       console.log('[E2E Test] Camera active with live video stream and FPS counter');
 

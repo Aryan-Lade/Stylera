@@ -119,10 +119,10 @@ export const useGarmentStore = create<GarmentStoreState>((set, get) => ({
         loadingMessage: `Detected ${predictedCategory} (${Math.round(confidence * 100)}%). Removing background...`,
       });
 
-      // Run on-device background removal
+      // Run on-device background removal & model-wearer isolation
       let processedImageUrl = dataUrl;
       try {
-        processedImageUrl = await removeBackgroundClient(dataUrl);
+        processedImageUrl = await removeBackgroundClient(dataUrl, predictedCategory);
       } catch (bgErr) {
         console.warn('[Stylera GarmentStore] Background removal skipped:', bgErr);
       }

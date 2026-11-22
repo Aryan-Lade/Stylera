@@ -186,6 +186,28 @@ class VisionManager {
     return { poseResult, faceResult, timestamp: safeTimestamp };
   }
 
+  /**
+   * Runs face landmark detection on a static image or canvas
+   * Used to automatically isolate glasses/headwear from images of models wearing them
+   */
+  public async detectFaceOnStaticImage(
+    imageSource: HTMLCanvasElement | HTMLImageElement | HTMLVideoElement | ImageBitmap
+  ): Promise<Array<{ x: number; y: number; z: number }> | null> {
+    if (!this.isReady) {
+      await this.initialize();
+    }
+    if (!this.faceLandmarker) return null;
+
+    try {
+      this.lastTimestamp = Math.max(this.lastTimestamp + 1, Math.floor(performance.now()));
+      const res = this.faceLandmarker.detectForVideo(imageSource, this.lastTimestamp);
+      return res.faceLandmarks?.[0] || null;
+    } catch (err) {
+      console.warn('[Stylera Vision] Static face detection on image failed:', err);
+      return null;
+    }
+  }
+
   public hasRecentDetection(): boolean {
     return performance.now() - this.lastSuccessfulDetectionTime < 1000;
   }

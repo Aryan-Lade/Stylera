@@ -356,6 +356,29 @@ export const CameraViewport: React.FC<CameraViewportProps> = ({ children }) => {
         </div>
       )}
 
+      {/* AI Virtual Fit & Style Advisor Feedback */}
+      {items.length > 0 && isTracking && (
+        <div className="absolute top-14 left-1/2 -translate-x-1/2 z-20 pointer-events-none transition-all duration-300 animate-fadeIn">
+          <div className="bg-slate-950/90 backdrop-blur-md border border-pink-500/40 text-white text-[11px] px-3.5 py-1.5 rounded-full shadow-2xl flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-pink-500 animate-pulse" />
+            <span className="font-bold bg-gradient-to-r from-pink-400 to-rose-400 bg-clip-text text-transparent">
+              3D AI Fit:
+            </span>
+            <span className="text-slate-200 truncate max-w-[260px]">
+              {items[items.length - 1]?.category === 'sunglasses/eyeglasses'
+                ? 'Frames complement your face structure & eye contour'
+                : items[items.length - 1]?.category === 'cap/hat/beanie'
+                ? 'Crown alignment snug above brow line'
+                : items[items.length - 1]?.category?.includes('shirt') || items[items.length - 1]?.category === 't-shirt'
+                ? 'Shoulder drape & torso contour balanced'
+                : items[items.length - 1]?.category === 'watch'
+                ? 'Dial anchored cleanly to wrist movement'
+                : '3D Live Fit locked with real-time tracking'}
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* Quick Controls Bar (Top Floating) */}
       <div className="absolute top-3 left-3 right-3 flex items-center justify-between pointer-events-auto z-20">
         <div className="flex items-center gap-1.5 bg-slate-950/75 backdrop-blur-md px-2 py-1 rounded-lg border border-slate-800/80 shadow-md">

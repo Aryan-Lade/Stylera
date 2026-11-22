@@ -192,7 +192,7 @@ export const DropZone: React.FC<DropZoneProps> = ({ children }) => {
             </div>
             <h4 className="text-sm font-semibold text-white mb-1">Drag a product here</h4>
             <p className="text-[11px] text-slate-400 leading-normal">
-              Drag any sunglasses, clothes, shoes, or accessories from Myntra, Ajio or paste a product link to try on live.
+              Drag any sunglasses, clothes, shoes, or accessories from Myntra, Ajio or paste a product link to try them on.
             </p>
           </div>
         </div>
