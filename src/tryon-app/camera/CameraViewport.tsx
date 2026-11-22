@@ -3,6 +3,7 @@ import { useCameraStore } from './cameraStore';
 import { useGarmentStore } from '../garments/garmentStore';
 import { visionManager } from '../vision/visionManager';
 import { OverlayRenderer } from '../render/overlayRenderer';
+import { CATEGORY_ANCHORS } from '../garments/categoryAnchors';
 import { FlipHorizontal, Settings2, Activity, Camera, Crosshair } from 'lucide-react';
 import { SnapshotPreviewModal } from '../ui/SnapshotPreviewModal';
 
@@ -173,8 +174,29 @@ export const CameraViewport: React.FC<CameraViewportProps> = ({ children }) => {
       }
     }
 
+    // Determine which detectors are needed based on active items to maximize FPS (30 FPS target)
+    const needFace =
+      items.length === 0 ||
+      items.some((i) => {
+        const b = CATEGORY_ANCHORS[i.category]?.bodyType;
+        return b === 'face' || b === 'head' || b === 'neck' || i.category === 'earrings';
+      });
+    const needPose =
+      items.length === 0 ||
+      items.some((i) => {
+        const b = CATEGORY_ANCHORS[i.category]?.bodyType;
+        return (
+          b === 'upper_body' ||
+          b === 'lower_body' ||
+          b === 'dress' ||
+          b === 'footwear' ||
+          b === 'wrist' ||
+          b === 'ring'
+        );
+      });
+
     // Run MediaPipe detection
-    const detection = visionManager.detect(video, now);
+    const detection = visionManager.detect(video, now, { needFace, needPose });
 
     const hasFace = Boolean(detection.faceResult?.faceLandmarks && detection.faceResult.faceLandmarks.length > 0);
     const hasPose = Boolean(detection.poseResult?.landmarks && detection.poseResult.landmarks.length > 0);

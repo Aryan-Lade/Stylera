@@ -46,26 +46,27 @@ export function computeFaceItemTransform(
   const headWidth = Math.hypot(
     (rightTemple.x - leftTemple.x) * viewportWidth,
     (rightTemple.y - leftTemple.y) * viewportHeight
-  ) || eyeSpan * 1.8;
+  ) || eyeSpan * 1.5;
 
   const headHeight = Math.hypot(
     (chin.x - forehead.x) * viewportWidth,
     (chin.y - forehead.y) * viewportHeight
-  ) || eyeSpan * 2.2;
+  ) || eyeSpan * 2.0;
 
   let centerX = nx;
   let centerY = ny;
-  let width = eyeSpan * 2.3;
-  let height = eyeSpan * 1.1;
+  // Natural sunglasses width fits temple-to-temple span with 5% margin
+  let width = Math.max(headWidth * 1.05, eyeSpan * 1.55);
+  let height = width * 0.42;
 
   if (bodyType === 'head') {
     // For cap/hat/beanie: placed on top of forehead
     const fx = forehead.x * viewportWidth;
     const fy = forehead.y * viewportHeight;
     centerX = fx;
-    centerY = fy - headHeight * 0.25;
-    width = headWidth * 1.35;
-    height = headHeight * 0.9;
+    centerY = fy - headHeight * 0.28;
+    width = headWidth * 1.25;
+    height = headHeight * 0.85;
   }
 
   // 3D Rotation extraction

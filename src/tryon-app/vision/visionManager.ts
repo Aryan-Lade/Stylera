@@ -138,10 +138,17 @@ class VisionManager {
     }
   }
 
-  public detect(videoElement: HTMLVideoElement, timestamp: number): VisionDetectionResults {
+  public detect(
+    videoElement: HTMLVideoElement,
+    timestamp: number,
+    options?: { needFace?: boolean; needPose?: boolean }
+  ): VisionDetectionResults {
     if (!this.isReady || videoElement.readyState < 2) {
       return { poseResult: null, faceResult: null, timestamp };
     }
+
+    const needFace = options?.needFace ?? true;
+    const needPose = options?.needPose ?? true;
 
     // MediaPipe requires strictly monotonically increasing timestamp
     let safeTimestamp = Math.floor(timestamp);
@@ -153,20 +160,20 @@ class VisionManager {
     let poseResult: PoseLandmarkerResult | null = null;
     let faceResult: FaceLandmarkerResult | null = null;
 
-    try {
-      if (this.faceLandmarker) {
+    if (needFace && this.faceLandmarker) {
+      try {
         faceResult = this.faceLandmarker.detectForVideo(videoElement, safeTimestamp);
+      } catch {
+        // frame skip
       }
-    } catch {
-      // frame skip
     }
 
-    try {
-      if (this.poseLandmarker) {
+    if (needPose && this.poseLandmarker) {
+      try {
         poseResult = this.poseLandmarker.detectForVideo(videoElement, safeTimestamp);
+      } catch {
+        // frame skip
       }
-    } catch {
-      // frame skip
     }
 
     if (

@@ -121,8 +121,8 @@ export const CATEGORY_ANCHORS: Record<GarmentCategory, BodyRegion> = {
     bodyType: 'face',
     primaryLandmarks: [33, 263], // Left and right outer eye corners (face mesh)
     secondaryLandmarks: [168, 6], // Nose bridge
-    widthScale: 2.3,
-    heightScale: 1.1,
+    widthScale: 1.0,
+    heightScale: 1.0,
     yOffsetRatio: 0.0,
     zLayer: 50,
   },

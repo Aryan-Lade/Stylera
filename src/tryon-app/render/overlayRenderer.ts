@@ -241,9 +241,16 @@ export class OverlayRenderer {
       ? faceTransform.rotationZ + (item.rotation * Math.PI) / 180
       : -faceTransform.rotationZ + (item.rotation * Math.PI) / 180;
 
+    // Preserve natural texture aspect ratio so eyewear is never squished or stretched
+    const texture = this.garmentTextures.get(item.id);
+    const imgAspect =
+      texture && texture.image && texture.image.width && texture.image.height
+        ? texture.image.height / texture.image.width
+        : 0.42;
+
     const finalWidth = faceTransform.width * anchorConfig.widthScale * item.scale;
-    const finalHeight = faceTransform.height * anchorConfig.heightScale * item.scale;
-    mesh.scale.set(finalWidth, finalHeight, finalWidth * 0.4);
+    const finalHeight = bodyType === 'face' ? finalWidth * imgAspect : faceTransform.height * anchorConfig.heightScale * item.scale;
+    mesh.scale.set(finalWidth, finalHeight, finalWidth * 0.25);
   }
 
   private updateLowerBodyMesh(
