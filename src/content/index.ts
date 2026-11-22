@@ -160,6 +160,16 @@ function setupDragInterceptors() {
           e.dataTransfer.setData('application/json', JSON.stringify(metadata));
         }
 
+        // Send metadata to try-on iframe window for seamless automatic category detection
+        const iframe = document.getElementById(APP_CONFIG.iframeId) as HTMLIFrameElement | null;
+        iframe?.contentWindow?.postMessage(
+          {
+            type: 'STYLERIA_DRAG_METADATA',
+            metadata,
+          },
+          '*'
+        );
+
         // Auto-reveal the Try-On window if hidden so the user can drop into it
         let container = document.getElementById(APP_CONFIG.containerId);
         if (!container) {

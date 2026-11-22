@@ -1,16 +1,17 @@
 import { create } from 'zustand';
 import { GarmentItem, GarmentCategory, FetchImageResponse } from '../../shared/types';
 import { APP_CONFIG } from '../../shared/constants';
-import { classifyGarment } from './classifier';
+import { classifyMultiModal, extractTokensFromUrl } from './classifier';
 import { removeBackgroundClient } from './bgRemoval';
 
-interface IngestOptions {
+export interface IngestOptions {
   imageUrl: string;
   category?: GarmentCategory;
   confidence?: number;
   title?: string;
   brand?: string;
   price?: string;
+  categoryHint?: string;
 }
 
 interface GarmentStoreState {
@@ -29,6 +30,34 @@ interface GarmentStoreState {
   updateItemTransform: (id: string, updates: Partial<Pick<GarmentItem, 'scale' | 'offsetX' | 'offsetY' | 'rotation'>>) => void;
   updateCategory: (id: string, category: GarmentCategory) => void;
   updateProcessedImage: (id: string, newProcessedUrl: string) => void;
+}
+
+function getImageNaturalDimensions(dataUrl: string): Promise<{ width: number; height: number }> {
+  return new Promise((resolve) => {
+    if (typeof Image === 'undefined') {
+      resolve({ width: 1, height: 1 });
+      return;
+    }
+    // Safety timeout for jsdom / test environments where Image doesn't load external URLs
+    const timer = setTimeout(() => {
+      resolve({ width: 1, height: 1 });
+    }, 400);
+
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      clearTimeout(timer);
+      resolve({
+        width: img.naturalWidth || img.width || 1,
+        height: img.naturalHeight || img.height || 1,
+      });
+    };
+    img.onerror = () => {
+      clearTimeout(timer);
+      resolve({ width: 1, height: 1 });
+    };
+    img.src = dataUrl;
+  });
 }
 
 export const useGarmentStore = create<GarmentStoreState>((set, get) => ({
@@ -65,20 +94,30 @@ export const useGarmentStore = create<GarmentStoreState>((set, get) => ({
         }
       }
 
-      set({ loadingMessage: 'Classifying category & removing background...' });
+      set({ loadingMessage: 'Analyzing garment & category detection...' });
 
-      // Run zero-shot classification from text hints
+      // Multi-modal category classification
       let predictedCategory = opts.category;
       let confidence = opts.confidence ?? 0.9;
 
-      if (!predictedCategory && (opts.title || opts.brand)) {
-        const textHints = `${opts.brand || ''} ${opts.title || ''}`;
-        const classification = classifyGarment(textHints);
+      if (!predictedCategory) {
+        // Calculate image aspect ratio for zero-shot geometric classification
+        const dims = await getImageNaturalDimensions(dataUrl);
+        const aspectRatio = dims.width / Math.max(1, dims.height);
+
+        const textHints = `${opts.brand || ''} ${opts.title || ''} ${opts.categoryHint || ''}`.trim();
+        const classification = classifyMultiModal({
+          textHints,
+          url: opts.imageUrl,
+          aspectRatio,
+        });
         predictedCategory = classification.category;
         confidence = classification.confidence;
-      } else if (!predictedCategory) {
-        predictedCategory = 't-shirt';
       }
+
+      set({
+        loadingMessage: `Detected ${predictedCategory} (${Math.round(confidence * 100)}%). Removing background...`,
+      });
 
       // Run on-device background removal
       let processedImageUrl = dataUrl;
@@ -88,13 +127,28 @@ export const useGarmentStore = create<GarmentStoreState>((set, get) => ({
         console.warn('[Stylera GarmentStore] Background removal skipped:', bgErr);
       }
 
+      // Generate clean title if not provided
+      let itemTitle = opts.title;
+      if (!itemTitle || itemTitle === 'Fashion Item' || itemTitle === 'Product Item') {
+        const urlTokens = extractTokensFromUrl(opts.imageUrl);
+        if (urlTokens && urlTokens.trim().length > 3) {
+          itemTitle = urlTokens
+            .split(/\s+/)
+            .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+            .slice(0, 5)
+            .join(' ');
+        } else {
+          itemTitle = predictedCategory.charAt(0).toUpperCase() + predictedCategory.slice(1);
+        }
+      }
+
       const newItem: GarmentItem = {
         id: `garment-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
         sourceUrl: opts.imageUrl,
         processedImageUrl,
         category: predictedCategory,
         confidence,
-        title: opts.title || 'Product Item',
+        title: itemTitle,
         brand: opts.brand,
         price: opts.price,
         visible: true,
@@ -154,9 +208,11 @@ export const useGarmentStore = create<GarmentStoreState>((set, get) => ({
     }));
   },
 
-  setActiveItem: (activeItemId: string | null) => set({ activeItemId }),
+  setActiveItem: (id: string | null) => {
+    set({ activeItemId: id });
+  },
 
-  updateItemTransform: (id: string, updates) => {
+  updateItemTransform: (id, updates) => {
     set((state) => ({
       items: state.items.map((item) =>
         item.id === id ? { ...item, ...updates } : item
