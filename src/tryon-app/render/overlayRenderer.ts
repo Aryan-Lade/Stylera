@@ -128,10 +128,11 @@ export class OverlayRenderer {
         continue;
       }
 
-      // Apply ambient lighting color tint
+      // Preserve original texture colors with subtle ambient response (clamped to prevent washout)
       const mesh = this.garmentMeshes.get(item.id);
       if (mesh && mesh.material instanceof THREE.MeshBasicMaterial) {
-        mesh.material.color.copy(lighting.color).multiplyScalar(lighting.brightness);
+        const safeBrightness = Math.min(1.05, Math.max(0.9, lighting.brightness));
+        mesh.material.color.setRGB(1.0, 1.0, 1.0).multiplyScalar(safeBrightness);
       }
 
       const anchorConfig = CATEGORY_ANCHORS[item.category] || CATEGORY_ANCHORS['t-shirt'];

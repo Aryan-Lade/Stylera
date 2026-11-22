@@ -55,9 +55,9 @@ export function computeFaceItemTransform(
 
   let centerX = nx;
   let centerY = ny;
-  // Natural sunglasses width fits temple-to-temple span with 5% margin
-  let width = Math.max(headWidth * 1.05, eyeSpan * 1.55);
-  let height = width * 0.42;
+  // Natural sunglasses width fits temple-to-temple span with full facial eye coverage
+  let width = Math.max(headWidth * 1.25, eyeSpan * 1.95);
+  let height = width * 0.45;
 
   if (bodyType === 'head') {
     // For cap/hat/beanie: placed on top of forehead

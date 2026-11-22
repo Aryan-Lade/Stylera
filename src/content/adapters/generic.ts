@@ -7,6 +7,18 @@ export const GenericAdapter: SiteAdapter = {
   extractFromElement: (element: HTMLElement): ProductMetadata | null => {
     // 1. Check for standard <img> or picture elements
     let imageUrl = '';
+
+    // Specialized high-resolution clean front-view detection for Amazon
+    if (window.location.hostname.includes('amazon')) {
+      const firstThumb = document.querySelector<HTMLImageElement>('#altImages ul li.imageThumbnail img');
+      if (firstThumb && (element.closest('#imageBlock, #main-image-container') || element.id === 'landingImage')) {
+        const thumbSrc = firstThumb.currentSrc || firstThumb.src || firstThumb.getAttribute('data-src') || '';
+        if (thumbSrc && !thumbSrc.includes('play-button') && !thumbSrc.includes('video')) {
+          imageUrl = thumbSrc.replace(/\._[A-Z0-9_,]+_\./, '._AC_SL1500_.');
+        }
+      }
+    }
+
     const img = (element.tagName === 'IMG' ? element : element.querySelector('img')) as HTMLImageElement | null;
 
     if (img) {

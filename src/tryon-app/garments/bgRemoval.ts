@@ -152,7 +152,8 @@ export function isolateEyewearFromFace(
   }
 
   cropCtx.putImageData(imgData, 0, 0);
-  return cropCanvas.toDataURL('image/png');
+  const trimmed = autoTrimCanvas(cropCanvas);
+  return trimmed.toDataURL('image/png');
 }
 
 /**
@@ -199,7 +200,141 @@ export function isolateUpperBodyFromFace(
   if (!cropCtx) return canvas.toDataURL('image/png');
 
   cropCtx.drawImage(canvas, 0, startY, w, cropH, 0, 0, w, cropH);
-  return cropCanvas.toDataURL('image/png');
+  const trimmed = autoTrimCanvas(cropCanvas);
+  return trimmed.toDataURL('image/png');
+}
+
+/**
+ * Trims transparent outer margins to tightly bound the product
+ * Centers the garment and avoids scaling empty padding
+ */
+export function autoTrimCanvas(canvas: HTMLCanvasElement): HTMLCanvasElement {
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return canvas;
+  const w = canvas.width;
+  const h = canvas.height;
+  const imgData = ctx.getImageData(0, 0, w, h);
+  const data = imgData.data;
+
+  let minX = w, maxX = 0, minY = h, maxY = 0;
+  let hasPixels = false;
+
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const alpha = data[(y * w + x) * 4 + 3];
+      if (alpha > 15) {
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+        hasPixels = true;
+      }
+    }
+  }
+
+  if (!hasPixels || maxX <= minX || maxY <= minY) {
+    return canvas;
+  }
+
+  const pad = 4;
+  const cropX = Math.max(0, minX - pad);
+  const cropY = Math.max(0, minY - pad);
+  const cropW = Math.min(w - cropX, (maxX - minX) + pad * 2);
+  const cropH = Math.min(h - cropY, (maxY - minY) + pad * 2);
+
+  const trimmed = document.createElement('canvas');
+  trimmed.width = cropW;
+  trimmed.height = cropH;
+  const tCtx = trimmed.getContext('2d');
+  if (!tCtx) return canvas;
+
+  tCtx.drawImage(canvas, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+  return trimmed;
+}
+
+/**
+ * Isolates the primary front frame for eyewear in 3/4 angled product shots
+ * Trims trailing temple arms that recede into perspective depth
+ */
+export function isolateFrontEyewearCluster(canvas: HTMLCanvasElement): HTMLCanvasElement {
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return canvas;
+  const w = canvas.width;
+  const h = canvas.height;
+  const imgData = ctx.getImageData(0, 0, w, h);
+  const data = imgData.data;
+
+  const colHeights = new Int32Array(w);
+  let maxColHeight = 0;
+
+  for (let x = 0; x < w; x++) {
+    let top = -1;
+    let bot = -1;
+    for (let y = 0; y < h; y++) {
+      if (data[(y * w + x) * 4 + 3] > 20) {
+        if (top === -1) top = y;
+        bot = y;
+      }
+    }
+    if (top !== -1 && bot !== -1) {
+      colHeights[x] = bot - top;
+      if (colHeights[x] > maxColHeight) {
+        maxColHeight = colHeights[x];
+      }
+    }
+  }
+
+  if (maxColHeight < 20) return canvas;
+
+  // Detect trailing thin temple arms on right side (angled into depth)
+  let rightCutoff = w;
+  for (let x = Math.floor(w * 0.55); x < w - 5; x++) {
+    if (colHeights[x] > 0 && colHeights[x] < maxColHeight * 0.32) {
+      let isThinArm = true;
+      for (let k = 1; k < 8 && x + k < w; k++) {
+        if (colHeights[x + k] > maxColHeight * 0.38) {
+          isThinArm = false;
+          break;
+        }
+      }
+      if (isThinArm) {
+        rightCutoff = Math.min(w, x + 8);
+        break;
+      }
+    }
+  }
+
+  // Detect trailing thin temple arms on left side
+  let leftCutoff = 0;
+  for (let x = Math.floor(w * 0.45); x > 5; x--) {
+    if (colHeights[x] > 0 && colHeights[x] < maxColHeight * 0.32) {
+      let isThinArm = true;
+      for (let k = 1; k < 8 && x - k >= 0; k++) {
+        if (colHeights[x - k] > maxColHeight * 0.38) {
+          isThinArm = false;
+          break;
+        }
+      }
+      if (isThinArm) {
+        leftCutoff = Math.max(0, x - 8);
+        break;
+      }
+    }
+  }
+
+  if (rightCutoff - leftCutoff < w * 0.4) {
+    return canvas;
+  }
+
+  const cropped = document.createElement('canvas');
+  const cropW = rightCutoff - leftCutoff;
+  cropped.width = cropW;
+  cropped.height = h;
+  const cCtx = cropped.getContext('2d');
+  if (!cCtx) return canvas;
+
+  cCtx.drawImage(canvas, leftCutoff, 0, cropW, h, 0, 0, cropW, h);
+  return autoTrimCanvas(cropped);
 }
 
 /**
@@ -413,7 +548,16 @@ export async function removeBackgroundClient(
         }
 
         ctx.putImageData(imgData, 0, 0);
-        const cutoutUrl = canvas.toDataURL('image/png');
+
+        // Auto-trim transparent outer padding to center product tightly
+        let finalCanvas = autoTrimCanvas(canvas);
+
+        // For eyewear, trim perspective trailing temple arms
+        if (category === 'sunglasses/eyeglasses') {
+          finalCanvas = isolateFrontEyewearCluster(finalCanvas);
+        }
+
+        const cutoutUrl = finalCanvas.toDataURL('image/png');
 
         setCachedCutout(cacheKey, cutoutUrl);
         resolve(cutoutUrl);
