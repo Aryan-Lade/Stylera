@@ -79,7 +79,7 @@ export const useGarmentStore = create<GarmentStoreState>((set, get) => ({
       let dataUrl = opts.imageUrl;
 
       // In browser extension environment, request background service worker to fetch image to avoid CORS taint
-      if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
+      if (typeof chrome !== 'undefined' && chrome.runtime?.id && chrome.runtime?.sendMessage) {
         try {
           const res = (await chrome.runtime.sendMessage({
             type: 'FETCH_IMAGE',
@@ -89,8 +89,9 @@ export const useGarmentStore = create<GarmentStoreState>((set, get) => ({
           if (res?.success && res.dataUrl) {
             dataUrl = res.dataUrl;
           }
-        } catch (msgErr) {
-          console.warn('[Stylera GarmentStore] Background fetch fallback to direct URL:', msgErr);
+        } catch {
+          // Normal direct fetch fallback when service worker is idle
+          dataUrl = opts.imageUrl;
         }
       }
 
