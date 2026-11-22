@@ -3,7 +3,7 @@ import { useCameraStore } from './cameraStore';
 import { useGarmentStore } from '../garments/garmentStore';
 import { visionManager } from '../vision/visionManager';
 import { OverlayRenderer } from '../render/overlayRenderer';
-import { FlipHorizontal, Settings2, Video, VideoOff, Activity, Camera } from 'lucide-react';
+import { FlipHorizontal, Settings2, Activity, Camera, Crosshair } from 'lucide-react';
 import { SnapshotPreviewModal } from '../ui/SnapshotPreviewModal';
 
 interface CameraViewportProps {
@@ -20,14 +20,13 @@ export const CameraViewport: React.FC<CameraViewportProps> = ({ children }) => {
     stream,
     isMirrored,
     toggleMirror,
+    isAutoFraming,
+    toggleAutoFraming,
     setVideoElement,
     resolution,
-    setResolution,
     availableDevices,
     selectedDeviceId,
     setSelectedDevice,
-    stopCamera,
-    startCamera,
   } = useCameraStore();
 
   const { items } = useGarmentStore();
@@ -41,6 +40,12 @@ export const CameraViewport: React.FC<CameraViewportProps> = ({ children }) => {
   const [snapshotResult, setSnapshotResult] = useState<{ snapshot: string; rawVideo: string } | null>(null);
   const frameCountRef = useRef(0);
   const lastFpsUpdateRef = useRef(performance.now());
+  const lastFaceDetectionTimeRef = useRef(performance.now());
+
+  // Auto-framing smooth state
+  const targetViewportRef = useRef({ scale: 1, translateX: 0, translateY: 0 });
+  const currentViewportRef = useRef({ scale: 1, translateX: 0, translateY: 0 });
+  const [viewportTransform, setViewportTransform] = useState({ scale: 1, translateX: 0, translateY: 0 });
 
   const handleTakeSnapshot = () => {
     const video = videoRef.current;
@@ -65,7 +70,7 @@ export const CameraViewport: React.FC<CameraViewportProps> = ({ children }) => {
       }
       const rawVideoDataUrl = rawCanvas.toDataURL('image/png');
 
-      // 2. Capture composite (video + Three.js overlay)
+      // 2. Capture composite (video + Three.js overlay with auto-framing crop)
       const compCanvas = document.createElement('canvas');
       compCanvas.width = w;
       compCanvas.height = h;
@@ -78,8 +83,28 @@ export const CameraViewport: React.FC<CameraViewportProps> = ({ children }) => {
         compCtx.drawImage(video, 0, 0, w, h);
         compCtx.drawImage(renderer.getCanvas(), 0, 0, w, h);
       }
-      const snapshotDataUrl = compCanvas.toDataURL('image/png');
 
+      // If auto-framing was active, apply the same framed crop to snapshot
+      if (isAutoFraming && currentViewportRef.current.scale > 1.02) {
+        const framedCanvas = document.createElement('canvas');
+        framedCanvas.width = w;
+        framedCanvas.height = h;
+        const fCtx = framedCanvas.getContext('2d');
+        if (fCtx) {
+          const s = currentViewportRef.current.scale;
+          const tx = (currentViewportRef.current.translateX / 100) * w;
+          const ty = (currentViewportRef.current.translateY / 100) * h;
+          fCtx.translate(w / 2, h / 2);
+          fCtx.scale(s, s);
+          fCtx.translate(tx, ty);
+          fCtx.translate(-w / 2, -h / 2);
+          fCtx.drawImage(compCanvas, 0, 0);
+          setSnapshotResult({ snapshot: framedCanvas.toDataURL('image/png'), rawVideo: rawVideoDataUrl });
+          return;
+        }
+      }
+
+      const snapshotDataUrl = compCanvas.toDataURL('image/png');
       setSnapshotResult({ snapshot: snapshotDataUrl, rawVideo: rawVideoDataUrl });
     } catch (err) {
       console.warn('Snapshot error:', err);
@@ -151,25 +176,90 @@ export const CameraViewport: React.FC<CameraViewportProps> = ({ children }) => {
     // Run MediaPipe detection
     const detection = visionManager.detect(video, now);
 
-    const hasActiveTracking = Boolean(
-      (detection.faceResult?.faceLandmarks && detection.faceResult.faceLandmarks.length > 0) ||
-      (detection.poseResult?.landmarks && detection.poseResult.landmarks.length > 0)
-    );
+    const hasFace = Boolean(detection.faceResult?.faceLandmarks && detection.faceResult.faceLandmarks.length > 0);
+    const hasPose = Boolean(detection.poseResult?.landmarks && detection.poseResult.landmarks.length > 0);
+    const hasActiveTracking = hasFace || hasPose;
+
     if (hasActiveTracking !== isTrackingRef.current) {
       isTrackingRef.current = hasActiveTracking;
       setIsTracking(hasActiveTracking);
     }
 
+    // Auto-Framing / Face Center Tracking calculation
+    if (hasFace && detection.faceResult?.faceLandmarks?.[0]) {
+      lastFaceDetectionTimeRef.current = now;
+      const face = detection.faceResult.faceLandmarks[0];
+      const nose = face[168] || face[1] || face[4];
+      const forehead = face[10];
+      const chin = face[152];
+      const leftCheek = face[234];
+      const rightCheek = face[454];
+
+      if (nose && forehead && chin) {
+        const faceCenterX = nose.x;
+        const faceCenterY = (forehead.y + chin.y) / 2;
+        const faceSpanX = Math.abs((rightCheek?.x ?? faceCenterX) - (leftCheek?.x ?? faceCenterX));
+        const faceSpanY = Math.abs(chin.y - forehead.y);
+        const faceSize = Math.max(faceSpanX, faceSpanY, 0.12);
+
+        // Optimal zoom: scale up when user is far away to focus on face & wearables
+        const targetZoom = Math.max(1.05, Math.min(1.48, 0.32 / faceSize));
+
+        // Pan to keep face centered horizontally and with pleasing 12% headroom
+        const maxPan = ((targetZoom - 1) / targetZoom) * 40;
+        const rawPanX = (faceCenterX - 0.5) * 100 * (isMirrored ? 1 : -1);
+        const rawPanY = (0.42 - faceCenterY) * 100;
+
+        const panX = Math.max(-maxPan, Math.min(maxPan, rawPanX));
+        const panY = Math.max(-maxPan, Math.min(maxPan, rawPanY));
+
+        targetViewportRef.current = {
+          scale: targetZoom,
+          translateX: panX,
+          translateY: panY,
+        };
+      }
+    } else if (hasPose && detection.poseResult?.landmarks?.[0]) {
+      const pose = detection.poseResult.landmarks[0];
+      const nose = pose[0];
+      if (nose) {
+        const panX = (nose.x - 0.5) * 100 * (isMirrored ? 1 : -1);
+        const panY = (0.42 - nose.y) * 100;
+        targetViewportRef.current = {
+          scale: 1.15,
+          translateX: Math.max(-18, Math.min(18, panX)),
+          translateY: Math.max(-18, Math.min(18, panY)),
+        };
+      }
+    } else if (now - lastFaceDetectionTimeRef.current > 1200) {
+      // Graceful return to normal 1x wide view
+      targetViewportRef.current = { scale: 1, translateX: 0, translateY: 0 };
+    }
+
+    // Smooth cinema-like viewport lerp
+    const cur = currentViewportRef.current;
+    const tgt = isAutoFraming ? targetViewportRef.current : { scale: 1, translateX: 0, translateY: 0 };
+    const LERP = 0.08;
+    cur.scale += (tgt.scale - cur.scale) * LERP;
+    cur.translateX += (tgt.translateX - cur.translateX) * LERP;
+    cur.translateY += (tgt.translateY - cur.translateY) * LERP;
+
+    setViewportTransform({
+      scale: Number(cur.scale.toFixed(3)),
+      translateX: Number(cur.translateX.toFixed(2)),
+      translateY: Number(cur.translateY.toFixed(2)),
+    });
+
     // Render overlay scene
     renderer.render(detection, items, isMirrored, video);
 
-    // Schedule next frame (using requestVideoFrameCallback if supported, otherwise requestAnimationFrame)
+    // Schedule next frame
     if ('requestVideoFrameCallback' in HTMLVideoElement.prototype && (video as any).requestVideoFrameCallback) {
       (video as any).requestVideoFrameCallback(runFrameLoop);
     } else {
       animationFrameId.current = requestAnimationFrame(runFrameLoop);
     }
-  }, [items, isMirrored]);
+  }, [items, isMirrored, isAutoFraming]);
 
   useEffect(() => {
     if (videoRef.current && stream) {
@@ -199,25 +289,37 @@ export const CameraViewport: React.FC<CameraViewportProps> = ({ children }) => {
 
   return (
     <div className="relative w-full h-full bg-slate-950 overflow-hidden flex items-center justify-center select-none">
-      {/* Underlying Webcam Video */}
-      <video
-        ref={videoRef}
-        playsInline
-        muted
-        autoPlay
-        onLoadedMetadata={handleVideoLoadedMetadata}
-        className={`absolute inset-0 w-full h-full object-cover transition-transform duration-150 ${
-          isMirrored ? 'scale-x-[-1]' : 'scale-x-100'
-        }`}
-      />
+      {/* Dynamic Auto-Framing / Center Stage Viewport Container */}
+      <div
+        className="absolute inset-0 w-full h-full flex items-center justify-center pointer-events-none overflow-hidden"
+        style={{
+          transform: isAutoFraming
+            ? `scale(${viewportTransform.scale}) translate(${viewportTransform.translateX}%, ${viewportTransform.translateY}%)`
+            : 'none',
+          transformOrigin: 'center center',
+          transition: 'transform 0.12s cubic-bezier(0.2, 0.8, 0.2, 1)',
+        }}
+      >
+        {/* Underlying Webcam Video */}
+        <video
+          ref={videoRef}
+          playsInline
+          muted
+          autoPlay
+          onLoadedMetadata={handleVideoLoadedMetadata}
+          className={`absolute inset-0 w-full h-full object-cover pointer-events-auto transition-transform duration-150 ${
+            isMirrored ? 'scale-x-[-1]' : 'scale-x-100'
+          }`}
+        />
 
-      {/* Render Canvas (Three.js overlay stacked directly above video) */}
-      <canvas
-        ref={canvasRef}
-        className={`absolute inset-0 w-full h-full object-cover pointer-events-none transition-transform duration-150 ${
-          isMirrored ? 'scale-x-[-1]' : 'scale-x-100'
-        }`}
-      />
+        {/* Render Canvas (Three.js overlay stacked directly above video) */}
+        <canvas
+          ref={canvasRef}
+          className={`absolute inset-0 w-full h-full object-cover pointer-events-none transition-transform duration-150 ${
+            isMirrored ? 'scale-x-[-1]' : 'scale-x-100'
+          }`}
+        />
+      </div>
 
       {/* Additional Overlays / Children (drop zones, static preview, outfit tray) */}
       <div className="absolute inset-0 pointer-events-auto">{children}</div>
@@ -250,7 +352,7 @@ export const CameraViewport: React.FC<CameraViewportProps> = ({ children }) => {
           {isTracking ? (
             <span className="text-[10px] text-emerald-400 font-medium px-1.5 flex items-center gap-1">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              3D Live Wear
+              {isAutoFraming ? '3D Center Stage' : '3D Live Wear'}
             </span>
           ) : items.length > 0 ? (
             <span className="text-[10px] text-amber-400 font-medium px-1.5 flex items-center gap-1">
@@ -262,6 +364,18 @@ export const CameraViewport: React.FC<CameraViewportProps> = ({ children }) => {
               {modelStatus}
             </span>
           )}
+
+          <button
+            onClick={toggleAutoFraming}
+            title={isAutoFraming ? 'Disable Smart Auto-Framing' : 'Enable Smart Auto-Framing (Face Focus)'}
+            className={`p-1.5 rounded-md transition-colors ${
+              isAutoFraming
+                ? 'bg-pink-500/20 text-pink-400 border border-pink-500/30'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <Crosshair className="w-3.5 h-3.5" />
+          </button>
 
           <button
             onClick={handleTakeSnapshot}
@@ -319,6 +433,23 @@ export const CameraViewport: React.FC<CameraViewportProps> = ({ children }) => {
 
           <div>
             <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block mb-1">
+              Smart Auto-Framing (Center Stage)
+            </label>
+            <button
+              onClick={toggleAutoFraming}
+              className={`w-full py-1.5 rounded-lg text-xs font-medium border transition-colors flex items-center justify-center gap-2 ${
+                isAutoFraming
+                  ? 'bg-pink-500/20 border-pink-500/40 text-pink-300'
+                  : 'bg-slate-950 border-slate-800 text-slate-400'
+              }`}
+            >
+              <Crosshair className="w-3 h-3" />
+              <span>{isAutoFraming ? 'Enabled (Auto Pan & Zoom)' : 'Disabled (Full Frame)'}</span>
+            </button>
+          </div>
+
+          <div>
+            <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block mb-1">
               Performance Mode
             </label>
             <div className="grid grid-cols-3 gap-1">
@@ -336,47 +467,6 @@ export const CameraViewport: React.FC<CameraViewportProps> = ({ children }) => {
                 </button>
               ))}
             </div>
-          </div>
-
-          <div>
-            <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block mb-1">
-              Resolution
-            </label>
-            <div className="grid grid-cols-3 gap-1">
-              {(['480p', '720p', '1080p'] as const).map((res) => (
-                <button
-                  key={res}
-                  onClick={() => setResolution(res)}
-                  className={`py-1 text-[11px] rounded font-medium transition-all ${
-                    resolution === res
-                      ? 'bg-pink-600 text-white shadow-sm'
-                      : 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800'
-                  }`}
-                >
-                  {res}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="pt-2 border-t border-slate-800 flex justify-between">
-            <button
-              onClick={() => {
-                stopCamera();
-                setShowSettings(false);
-              }}
-              className="flex items-center gap-1.5 text-[11px] text-red-400 hover:text-red-300"
-            >
-              <VideoOff className="w-3.5 h-3.5" />
-              <span>Stop Camera</span>
-            </button>
-            <button
-              onClick={() => startCamera()}
-              className="flex items-center gap-1.5 text-[11px] text-pink-400 hover:text-pink-300"
-            >
-              <Video className="w-3.5 h-3.5" />
-              <span>Restart</span>
-            </button>
           </div>
         </div>
       )}

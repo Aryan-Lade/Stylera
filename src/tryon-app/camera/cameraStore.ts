@@ -14,6 +14,7 @@ interface CameraStoreState {
   permissionStatus: CameraPermissionState;
   errorMessage: string | null;
   isMirrored: boolean;
+  isAutoFraming: boolean;
   selectedDeviceId: string;
   availableDevices: CameraDevice[];
   resolution: CameraResolution;
@@ -24,6 +25,8 @@ interface CameraStoreState {
   setVideoElement: (el: HTMLVideoElement | null) => void;
   setMirrored: (mirrored: boolean) => void;
   toggleMirror: () => void;
+  setAutoFraming: (enabled: boolean) => void;
+  toggleAutoFraming: () => void;
   setResolution: (res: CameraResolution) => void;
   setSelectedDevice: (deviceId: string) => void;
   startCamera: (deviceId?: string, resolution?: CameraResolution) => Promise<boolean>;
@@ -43,6 +46,7 @@ export const useCameraStore = create<CameraStoreState>((set, get) => ({
   permissionStatus: 'prompt',
   errorMessage: null,
   isMirrored: true,
+  isAutoFraming: true,
   selectedDeviceId: '',
   availableDevices: [],
   resolution: '720p',
@@ -52,6 +56,8 @@ export const useCameraStore = create<CameraStoreState>((set, get) => ({
   setVideoElement: (el) => set({ videoElement: el }),
   setMirrored: (isMirrored) => set({ isMirrored }),
   toggleMirror: () => set((state) => ({ isMirrored: !state.isMirrored })),
+  setAutoFraming: (isAutoFraming) => set({ isAutoFraming }),
+  toggleAutoFraming: () => set((state) => ({ isAutoFraming: !state.isAutoFraming })),
   setResolution: (resolution) => {
     set({ resolution });
     const { stream, selectedDeviceId } = get();
