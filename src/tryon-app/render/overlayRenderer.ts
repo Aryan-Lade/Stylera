@@ -139,7 +139,7 @@ export class OverlayRenderer {
       if (item.category === 'earrings') {
         this.updateEarringsMesh(item, faceLandmarks, timestamp);
       } else if (anchorConfig.bodyType === 'face' || anchorConfig.bodyType === 'head') {
-        this.updateFaceMesh(item, anchorConfig.bodyType, faceLandmarks, faceMatrix, timestamp);
+        this.updateFaceMesh(item, anchorConfig.bodyType, faceLandmarks, faceMatrix, timestamp, _isMirrored);
       } else if (anchorConfig.bodyType === 'lower_body') {
         this.updateLowerBodyMesh(item, poseLandmarks, timestamp);
       } else if (anchorConfig.bodyType === 'footwear') {
@@ -149,7 +149,7 @@ export class OverlayRenderer {
       } else if (anchorConfig.bodyType === 'neck') {
         this.updateNeckMesh(item, poseLandmarks, faceLandmarks, timestamp);
       } else {
-        this.updateGarmentMesh(item, poseLandmarks, timestamp);
+        this.updateGarmentMesh(item, poseLandmarks, timestamp, _isMirrored);
       }
     }
 
@@ -161,13 +161,26 @@ export class OverlayRenderer {
     bodyType: 'face' | 'head',
     faceLandmarks: Array<{ x: number; y: number; z: number }> | null,
     faceMatrix: number[] | Float32Array | null,
-    timestamp: number
+    timestamp: number,
+    isMirrored = true
   ) {
     let mesh = this.garmentMeshes.get(item.id);
     const anchorConfig = CATEGORY_ANCHORS[item.category];
 
     if (!mesh) {
-      const geometry = new THREE.PlaneGeometry(1, 1, 2, 2);
+      // 3D Curved Wearable Geometry for Eyewear & Headwear
+      const segmentsX = 16;
+      const segmentsY = 8;
+      const geometry = new THREE.PlaneGeometry(1, 1, segmentsX, segmentsY);
+      const pos = geometry.attributes.position;
+      // Curve backward around the face/temples: z = - (x^2) * 0.42
+      for (let i = 0; i < pos.count; i++) {
+        const x = pos.getX(i);
+        const zCurvature = -Math.pow(x, 2) * 0.42;
+        pos.setZ(i, zCurvature);
+      }
+      geometry.computeVertexNormals();
+
       const material = new THREE.MeshBasicMaterial({
         transparent: true,
         depthTest: false,
@@ -220,13 +233,17 @@ export class OverlayRenderer {
     );
 
     mesh.position.set(smX, -smY, 50);
+
+    // 3D head pose perspective rotation:
     mesh.rotation.x = faceTransform.rotationX;
-    mesh.rotation.y = faceTransform.rotationY;
-    mesh.rotation.z = -faceTransform.rotationZ + (item.rotation * Math.PI) / 180;
+    mesh.rotation.y = isMirrored ? faceTransform.rotationY : -faceTransform.rotationY;
+    mesh.rotation.z = isMirrored
+      ? faceTransform.rotationZ + (item.rotation * Math.PI) / 180
+      : -faceTransform.rotationZ + (item.rotation * Math.PI) / 180;
 
     const finalWidth = faceTransform.width * anchorConfig.widthScale * item.scale;
     const finalHeight = faceTransform.height * anchorConfig.heightScale * item.scale;
-    mesh.scale.set(finalWidth, finalHeight, 1);
+    mesh.scale.set(finalWidth, finalHeight, finalWidth * 0.4);
   }
 
   private updateLowerBodyMesh(
@@ -551,15 +568,26 @@ export class OverlayRenderer {
   private updateGarmentMesh(
     item: GarmentItem,
     poseLandmarks: Array<{ x: number; y: number; z: number; visibility?: number }> | null,
-    timestamp: number
+    timestamp: number,
+    isMirrored = true
   ) {
     const anchorConfig = CATEGORY_ANCHORS[item.category] || CATEGORY_ANCHORS['t-shirt'];
     let mesh = this.garmentMeshes.get(item.id);
 
-    // Create mesh if it doesn't exist
+    // Create 3D curved torso mesh if it doesn't exist
     if (!mesh) {
-      // 4x4 subdivided plane geometry for natural torso & limb mesh warping
-      const geometry = new THREE.PlaneGeometry(1, 1, 4, 4);
+      const segmentsX = 16;
+      const segmentsY = 16;
+      const geometry = new THREE.PlaneGeometry(1, 1, segmentsX, segmentsY);
+      const pos = geometry.attributes.position;
+      // 3D barrel depth curvature around torso
+      for (let i = 0; i < pos.count; i++) {
+        const x = pos.getX(i);
+        const zCurvature = (0.25 - Math.pow(x, 2)) * 0.35;
+        pos.setZ(i, zCurvature);
+      }
+      geometry.computeVertexNormals();
+
       const material = new THREE.MeshBasicMaterial({
         transparent: true,
         depthTest: false,
@@ -650,10 +678,12 @@ export class OverlayRenderer {
     const centerX = midShoulderX + (midHipX - midShoulderX) * anchorConfig.yOffsetRatio + item.offsetX;
     const centerY = midShoulderY + (midHipY - midShoulderY) * anchorConfig.yOffsetRatio + item.offsetY;
 
-    // Update mesh transform
+    // Update 3D mesh transform with mirror alignment
     mesh.position.set(centerX, -centerY, 0);
-    mesh.rotation.z = -angle + (item.rotation * Math.PI) / 180;
-    mesh.scale.set(garmentWidth, garmentHeight, 1);
+    mesh.rotation.z = isMirrored
+      ? angle + (item.rotation * Math.PI) / 180
+      : -angle + (item.rotation * Math.PI) / 180;
+    mesh.scale.set(garmentWidth, garmentHeight, garmentWidth * 0.35);
   }
 
   public getCanvas(): HTMLCanvasElement {

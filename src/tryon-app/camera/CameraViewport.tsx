@@ -34,6 +34,8 @@ export const CameraViewport: React.FC<CameraViewportProps> = ({ children }) => {
 
   const [showSettings, setShowSettings] = useState(false);
   const [modelStatus, setModelStatus] = useState<string>('Initializing AI...');
+  const [isTracking, setIsTracking] = useState(false);
+  const isTrackingRef = useRef(false);
   const [currentFps, setCurrentFps] = useState<number>(30);
   const [perfTier, setPerfTier] = useState<'low' | 'balanced' | 'high'>('balanced');
   const [snapshotResult, setSnapshotResult] = useState<{ snapshot: string; rawVideo: string } | null>(null);
@@ -149,6 +151,15 @@ export const CameraViewport: React.FC<CameraViewportProps> = ({ children }) => {
     // Run MediaPipe detection
     const detection = visionManager.detect(video, now);
 
+    const hasActiveTracking = Boolean(
+      (detection.faceResult?.faceLandmarks && detection.faceResult.faceLandmarks.length > 0) ||
+      (detection.poseResult?.landmarks && detection.poseResult.landmarks.length > 0)
+    );
+    if (hasActiveTracking !== isTrackingRef.current) {
+      isTrackingRef.current = hasActiveTracking;
+      setIsTracking(hasActiveTracking);
+    }
+
     // Render overlay scene
     renderer.render(detection, items, isMirrored, video);
 
@@ -203,13 +214,23 @@ export const CameraViewport: React.FC<CameraViewportProps> = ({ children }) => {
       {/* Render Canvas (Three.js overlay stacked directly above video) */}
       <canvas
         ref={canvasRef}
-        className={`absolute inset-0 w-full h-full pointer-events-none transition-transform duration-150 ${
+        className={`absolute inset-0 w-full h-full object-cover pointer-events-none transition-transform duration-150 ${
           isMirrored ? 'scale-x-[-1]' : 'scale-x-100'
         }`}
       />
 
       {/* Additional Overlays / Children (drop zones, static preview, outfit tray) */}
       <div className="absolute inset-0 pointer-events-auto">{children}</div>
+
+      {/* 3D Tracking Guidance Prompt */}
+      {items.length > 0 && !isTracking && (
+        <div className="absolute top-14 left-1/2 -translate-x-1/2 z-20 pointer-events-none transition-all duration-300">
+          <div className="bg-slate-900/90 backdrop-blur-md border border-amber-500/40 text-amber-300 text-[11px] px-3 py-1 rounded-full shadow-lg flex items-center gap-1.5 animate-pulse">
+            <span>✨</span>
+            <span>Face the camera to wear your {items[items.length - 1]?.category || 'garment'} live</span>
+          </div>
+        </div>
+      )}
 
       {/* Quick Controls Bar (Top Floating) */}
       <div className="absolute top-3 left-3 right-3 flex items-center justify-between pointer-events-auto z-20">
@@ -226,9 +247,21 @@ export const CameraViewport: React.FC<CameraViewportProps> = ({ children }) => {
         </div>
 
         <div className="flex items-center gap-1.5 bg-slate-950/75 backdrop-blur-md p-1 rounded-lg border border-slate-800/80 shadow-md">
-          <span className="text-[9px] text-slate-400 px-1.5 font-medium hidden sm:inline">
-            {modelStatus}
-          </span>
+          {isTracking ? (
+            <span className="text-[10px] text-emerald-400 font-medium px-1.5 flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              3D Live Wear
+            </span>
+          ) : items.length > 0 ? (
+            <span className="text-[10px] text-amber-400 font-medium px-1.5 flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping" />
+              Look at Camera
+            </span>
+          ) : (
+            <span className="text-[9px] text-slate-400 px-1.5 font-medium hidden sm:inline">
+              {modelStatus}
+            </span>
+          )}
 
           <button
             onClick={handleTakeSnapshot}

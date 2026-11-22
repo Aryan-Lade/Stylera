@@ -111,29 +111,6 @@ export const App: React.FC = () => {
           {stream && permissionStatus === 'granted' ? (
             <DropZone>
               <CameraViewport>
-                {/* Garments Preview Overlay */}
-                <div className="absolute inset-0 pointer-events-none overflow-hidden flex items-center justify-center">
-                  {items
-                    .filter((item) => item.visible)
-                    .map((item) => (
-                      <div
-                        key={item.id}
-                        className="absolute transition-transform duration-75 select-none"
-                        style={{
-                          transform: `translate(${item.offsetX}px, ${item.offsetY}px) scale(${item.scale}) rotate(${item.rotation}deg)`,
-                          maxWidth: '65%',
-                          maxHeight: '65%',
-                        }}
-                      >
-                        <img
-                          src={item.processedImageUrl || item.sourceUrl}
-                          alt={item.title}
-                          className="w-full h-full object-contain filter drop-shadow-[0_10px_20px_rgba(0,0,0,0.5)]"
-                        />
-                      </div>
-                    ))}
-                </div>
-
                 {/* Outfit Tray Controller */}
                 <OutfitTray />
               </CameraViewport>
