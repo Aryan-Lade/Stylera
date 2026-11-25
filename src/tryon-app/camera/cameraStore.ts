@@ -2,6 +2,7 @@ import { create } from 'zustand';
 
 export type CameraPermissionState = 'prompt' | 'requesting' | 'granted' | 'denied' | 'error';
 export type CameraResolution = '480p' | '720p' | '1080p';
+export type TryonEngine = 'on-device' | 'neural-vton';
 
 export interface CameraDevice {
   deviceId: string;
@@ -15,6 +16,7 @@ interface CameraStoreState {
   errorMessage: string | null;
   isMirrored: boolean;
   isAutoFraming: boolean;
+  tryonEngine: TryonEngine;
   selectedDeviceId: string;
   availableDevices: CameraDevice[];
   resolution: CameraResolution;
@@ -27,6 +29,8 @@ interface CameraStoreState {
   toggleMirror: () => void;
   setAutoFraming: (enabled: boolean) => void;
   toggleAutoFraming: () => void;
+  setTryonEngine: (engine: TryonEngine) => void;
+  toggleTryonEngine: () => void;
   setResolution: (res: CameraResolution) => void;
   setSelectedDevice: (deviceId: string) => void;
   startCamera: (deviceId?: string, resolution?: CameraResolution) => Promise<boolean>;
@@ -47,6 +51,7 @@ export const useCameraStore = create<CameraStoreState>((set, get) => ({
   errorMessage: null,
   isMirrored: true,
   isAutoFraming: true,
+  tryonEngine: 'on-device',
   selectedDeviceId: '',
   availableDevices: [],
   resolution: '720p',
@@ -58,6 +63,11 @@ export const useCameraStore = create<CameraStoreState>((set, get) => ({
   toggleMirror: () => set((state) => ({ isMirrored: !state.isMirrored })),
   setAutoFraming: (isAutoFraming) => set({ isAutoFraming }),
   toggleAutoFraming: () => set((state) => ({ isAutoFraming: !state.isAutoFraming })),
+  setTryonEngine: (tryonEngine) => set({ tryonEngine }),
+  toggleTryonEngine: () =>
+    set((state) => ({
+      tryonEngine: state.tryonEngine === 'on-device' ? 'neural-vton' : 'on-device',
+    })),
   setResolution: (resolution) => {
     set({ resolution });
     const { stream, selectedDeviceId } = get();

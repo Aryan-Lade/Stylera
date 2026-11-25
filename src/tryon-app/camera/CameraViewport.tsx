@@ -4,8 +4,9 @@ import { useGarmentStore } from '../garments/garmentStore';
 import { visionManager } from '../vision/visionManager';
 import { OverlayRenderer } from '../render/overlayRenderer';
 import { CATEGORY_ANCHORS } from '../garments/categoryAnchors';
-import { FlipHorizontal, Settings2, Activity, Camera, Crosshair } from 'lucide-react';
+import { FlipHorizontal, Settings2, Activity, Camera, Crosshair, Sparkles, Cpu } from 'lucide-react';
 import { SnapshotPreviewModal } from '../ui/SnapshotPreviewModal';
+import { decartVtonClient } from '../vision/decartVtonClient';
 
 interface CameraViewportProps {
   children?: React.ReactNode;
@@ -23,6 +24,9 @@ export const CameraViewport: React.FC<CameraViewportProps> = ({ children }) => {
     toggleMirror,
     isAutoFraming,
     toggleAutoFraming,
+    tryonEngine,
+    setTryonEngine,
+    toggleTryonEngine,
     setVideoElement,
     resolution,
     availableDevices,
@@ -47,6 +51,45 @@ export const CameraViewport: React.FC<CameraViewportProps> = ({ children }) => {
   const targetViewportRef = useRef({ scale: 1, translateX: 0, translateY: 0 });
   const currentViewportRef = useRef({ scale: 1, translateX: 0, translateY: 0 });
   const [viewportTransform, setViewportTransform] = useState({ scale: 1, translateX: 0, translateY: 0 });
+  const [neuralVtonStatus, setNeuralVtonStatus] = useState<string>('');
+
+  useEffect(() => {
+    decartVtonClient.onStatusChange((status) => {
+      if (status === 'connecting') setNeuralVtonStatus('Connecting Lucy V-TON...');
+      else if (status === 'connected') setNeuralVtonStatus('Neural Live Streaming');
+      else setNeuralVtonStatus('');
+    });
+  }, []);
+
+  useEffect(() => {
+    if (tryonEngine === 'neural-vton' && stream) {
+      const activeGarment = items[0]
+        ? {
+            id: items[0].id,
+            title: items[0].title || 'Product',
+            category: items[0].category,
+            imageUrl: items[0].processedImageUrl || items[0].sourceUrl,
+            brand: items[0].brand,
+          }
+        : undefined;
+
+      decartVtonClient.connect(stream, activeGarment).catch(console.error);
+    } else if (tryonEngine === 'on-device') {
+      decartVtonClient.disconnect();
+    }
+  }, [tryonEngine, stream]);
+
+  useEffect(() => {
+    if (tryonEngine === 'neural-vton' && items[0]) {
+      decartVtonClient.setGarment({
+        id: items[0].id,
+        title: items[0].title || 'Product',
+        category: items[0].category,
+        imageUrl: items[0].processedImageUrl || items[0].sourceUrl,
+        brand: items[0].brand,
+      });
+    }
+  }, [items, tryonEngine]);
 
   const handleTakeSnapshot = () => {
     const video = videoRef.current;
@@ -394,7 +437,39 @@ export const CameraViewport: React.FC<CameraViewportProps> = ({ children }) => {
         </div>
 
         <div className="flex items-center gap-1.5 bg-slate-950/75 backdrop-blur-md p-1 rounded-lg border border-slate-800/80 shadow-md">
-          {isTracking ? (
+          {/* Dual-Engine Mode Switcher Button */}
+          <button
+            onClick={toggleTryonEngine}
+            title={
+              tryonEngine === 'neural-vton'
+                ? 'Active: Decart Neural V-TON (Generative LiveKit). Click for 3D Mesh.'
+                : 'Active: On-Device 3D Mesh (Instant, 0ms). Click for Neural V-TON.'
+            }
+            className={`px-2 py-1 rounded-md text-[10px] font-semibold flex items-center gap-1 transition-all ${
+              tryonEngine === 'neural-vton'
+                ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-sm ring-1 ring-purple-400/50'
+                : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700/60'
+            }`}
+          >
+            {tryonEngine === 'neural-vton' ? (
+              <>
+                <Sparkles className="w-3 h-3 text-pink-300 animate-pulse" />
+                <span>Neural V-TON</span>
+              </>
+            ) : (
+              <>
+                <Cpu className="w-3 h-3 text-cyan-400" />
+                <span>3D Mesh</span>
+              </>
+            )}
+          </button>
+
+          {neuralVtonStatus && tryonEngine === 'neural-vton' ? (
+            <span className="text-[10px] text-purple-400 font-medium px-1.5 flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-ping" />
+              {neuralVtonStatus}
+            </span>
+          ) : isTracking ? (
             <span className="text-[10px] text-emerald-400 font-medium px-1.5 flex items-center gap-1">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
               {isAutoFraming ? '3D Center Stage' : '3D Live Wear'}
@@ -491,6 +566,36 @@ export const CameraViewport: React.FC<CameraViewportProps> = ({ children }) => {
               <Crosshair className="w-3 h-3" />
               <span>{isAutoFraming ? 'Enabled (Auto Pan & Zoom)' : 'Disabled (Full Frame)'}</span>
             </button>
+          </div>
+
+          <div>
+            <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block mb-1">
+              Virtual Try-On Engine
+            </label>
+            <div className="grid grid-cols-2 gap-1.5">
+              <button
+                onClick={() => setTryonEngine('on-device')}
+                className={`py-1.5 px-2 rounded-lg text-[11px] font-medium flex items-center justify-center gap-1.5 border transition-all ${
+                  tryonEngine === 'on-device'
+                    ? 'bg-cyan-500/20 border-cyan-500/50 text-cyan-300'
+                    : 'bg-slate-950 border-slate-800 text-slate-400'
+                }`}
+              >
+                <Cpu className="w-3 h-3" />
+                <span>3D Mesh</span>
+              </button>
+              <button
+                onClick={() => setTryonEngine('neural-vton')}
+                className={`py-1.5 px-2 rounded-lg text-[11px] font-medium flex items-center justify-center gap-1.5 border transition-all ${
+                  tryonEngine === 'neural-vton'
+                    ? 'bg-purple-500/20 border-purple-500/50 text-purple-300 shadow-sm'
+                    : 'bg-slate-950 border-slate-800 text-slate-400'
+                }`}
+              >
+                <Sparkles className="w-3 h-3 text-pink-400" />
+                <span>Neural V-TON</span>
+              </button>
+            </div>
           </div>
 
           <div>
