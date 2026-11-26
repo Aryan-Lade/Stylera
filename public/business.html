@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Stylera for Business | Real-Time AI Virtual Try-On (Decart Lucy V-TON)</title>
+  <link rel="icon" type="image/png" href="icon-32.png">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @keyframes pulseGlow {
+      0%, 100% { opacity: 0.4; transform: scale(1); }
+      50% { opacity: 0.8; transform: scale(1.05); }
+    }
+    .glow-bg {
+      animation: pulseGlow 6s infinite ease-in-out;
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 font-sans antialiased selection:bg-pink-500 selection:text-white min-h-screen flex flex-col">
+
+  <!-- Background Gradients -->
+  <div class="fixed inset-0 overflow-hidden pointer-events-none -z-10">
+    <div class="absolute -top-40 left-1/2 -translate-x-1/2 w-[700px] h-[700px] bg-gradient-to-tr from-pink-600/20 via-purple-600/20 to-cyan-500/10 blur-[130px] rounded-full glow-bg"></div>
+  </div>
+
+  <!-- Header -->
+  <header class="border-b border-slate-800/80 bg-slate-950/70 backdrop-blur-xl sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-pink-500 to-purple-600 flex items-center justify-center shadow-lg shadow-pink-500/20">
+          <svg class="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/>
+          </svg>
+        </div>
+        <div class="flex items-baseline gap-2">
+          <span class="text-xl font-bold tracking-tight bg-gradient-to-r from-white via-slate-100 to-slate-400 bg-clip-text text-transparent">Stylera</span>
+          <span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-pink-500/10 text-pink-400 border border-pink-500/20">Business</span>
+        </div>
+      </div>
+
+      <nav class="hidden md:flex items-center gap-8 text-sm text-slate-300">
+        <a href="#simulator" class="hover:text-white transition-colors">Live Simulator</a>
+        <a href="#roi" class="hover:text-white transition-colors">ROI & Metrics</a>
+        <a href="#integration" class="hover:text-white transition-colors">Integration</a>
+        <a href="#architecture" class="hover:text-white transition-colors">Architecture</a>
+      </nav>
+
+      <div class="flex items-center gap-3">
+        <a href="#simulator" class="px-4 py-2 rounded-xl text-xs font-semibold bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-400 hover:to-purple-500 text-white shadow-lg shadow-pink-500/25 transition-all">
+          Test Your Product
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <!-- Hero Section -->
+  <main class="flex-1 max-w-7xl mx-auto px-6 py-16 space-y-24">
+    <section class="text-center space-y-6 max-w-3xl mx-auto pt-6">
+      <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-500/10 border border-purple-500/20 text-purple-300 text-xs font-medium">
+        <span class="w-2 h-2 rounded-full bg-purple-400 animate-pulse"></span>
+        Powered by Decart Lucy V-TON Real-Time Generative Video
+      </div>
+
+      <h1 class="text-4xl sm:text-6xl font-extrabold tracking-tight leading-[1.15]">
+        Turn static product pages into <span class="bg-gradient-to-r from-pink-400 via-purple-400 to-cyan-400 bg-clip-text text-transparent">live fitting rooms</span>.
+      </h1>
+
+      <p class="text-slate-400 text-base sm:text-lg leading-relaxed">
+        Let shoppers see clothes and eyewear drape, shift, and shine dynamically on their live camera feed at 30 FPS. Seamlessly drops into Shopify, WooCommerce, or any custom storefront with a single script tag.
+      </p>
+    </section>
+
+    <!-- Interactive URL Simulator -->
+    <section id="simulator" class="bg-slate-900/60 border border-slate-800 rounded-3xl p-6 sm:p-10 shadow-2xl backdrop-blur-xl space-y-8">
+      <div class="space-y-2 text-center max-w-xl mx-auto">
+        <h2 class="text-2xl font-bold text-white">Live Storefront URL Simulator</h2>
+        <p class="text-xs text-slate-400">
+          Paste any e-commerce product link to test automatic catalog extraction and real-time V-TON conditioning.
+        </p>
+      </div>
+
+      <!-- Input Bar -->
+      <div class="max-w-2xl mx-auto space-y-3">
+        <div class="flex flex-col sm:flex-row gap-2">
+          <input 
+            type="url" 
+            id="url-input" 
+            placeholder="https://www.myntra.com/sunglasses/voyage/... or Shopify URL" 
+            value="https://www.myntra.com/sunglasses/voyage/voyage-unisex-square-sunglasses-58157mg2970/10748540/buy"
+            class="flex-1 bg-slate-950 border border-slate-700/80 rounded-2xl px-4 py-3 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500 transition-all"
+          />
+          <button 
+            id="btn-simulate"
+            class="px-6 py-3 rounded-2xl text-sm font-semibold bg-pink-600 hover:bg-pink-500 text-white shadow-md shadow-pink-600/30 transition-all flex items-center justify-center gap-2"
+          >
+            <span id="btn-spinner" class="hidden w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+            <span>Simulate Try-On</span>
+          </button>
+        </div>
+
+        <!-- Preset Chips -->
+        <div class="flex flex-wrap items-center justify-center gap-2 pt-1 text-xs text-slate-400">
+          <span>Quick presets:</span>
+          <button class="preset-chip px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors" data-url="https://www.myntra.com/sunglasses/voyage/voyage-unisex-square-sunglasses-58157mg2970/10748540/buy" data-cat="sunglasses" data-title="Voyage Square Sunglasses" data-brand="Voyage" data-img="https://assets.myntassets.com/h_1440,q_90,w_1080/v1/assets/images/10748540/2019/10/18/72ef4213-94c6-4355-8dca-6f81c9ba339e1571403239454-Voyage-Unisex-Square-Sunglasses-58157MG2970-1.jpg">
+            🕶️ Voyage Sunglasses
+          </button>
+          <button class="preset-chip px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors" data-url="https://shop.example.com/products/classic-denim-jacket" data-cat="top" data-title="Vintage Washed Denim Jacket" data-brand="Urban Denim" data-img="https://images.unsplash.com/photo-1576871337632-b9aef4c17ab9?w=600">
+            🧥 Denim Jacket
+          </button>
+          <button class="preset-chip px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors" data-url="https://shop.example.com/products/silk-floral-dress" data-cat="dress" data-title="Emerald Silk Flowing Midi Dress" data-brand="Atelier Rose" data-img="https://images.unsplash.com/photo-1595777457583-95e059d581b8?w=600">
+            👗 Silk Midi Dress
+          </button>
+        </div>
+      </div>
+
+      <!-- Simulation Display Stage -->
+      <div id="simulation-stage" class="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mx-auto pt-4">
+        <!-- Extracted Product Meta Card -->
+        <div class="bg-slate-950/80 border border-slate-800/80 rounded-2xl p-6 space-y-4 flex flex-col justify-between">
+          <div class="space-y-3">
+            <div class="flex items-center justify-between">
+              <span id="card-category" class="text-[11px] font-semibold uppercase px-2.5 py-1 rounded-md bg-pink-500/10 text-pink-400 border border-pink-500/20">
+                sunglasses
+              </span>
+              <span class="text-xs text-slate-400">Extracted in <strong class="text-emerald-400">18ms</strong></span>
+            </div>
+
+            <div class="flex gap-4 items-center">
+              <img id="card-img" src="https://assets.myntassets.com/h_1440,q_90,w_1080/v1/assets/images/10748540/2019/10/18/72ef4213-94c6-4355-8dca-6f81c9ba339e1571403239454-Voyage-Unisex-Square-Sunglasses-58157MG2970-1.jpg" alt="Product" class="w-20 h-20 object-cover rounded-xl border border-slate-800 bg-slate-900" />
+              <div>
+                <h3 id="card-title" class="text-sm font-bold text-white">Voyage Unisex Square Sunglasses</h3>
+                <p id="card-brand" class="text-xs text-slate-400">Brand: Voyage</p>
+                <p id="card-price" class="text-xs font-semibold text-emerald-400 mt-1">₹799 (Inclusive of all taxes)</p>
+              </div>
+            </div>
+
+            <div class="space-y-1.5 pt-2">
+              <label class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">Synthesized Lucy V-TON Prompt</label>
+              <div id="card-prompt" class="text-xs font-mono bg-slate-900/90 border border-slate-800 p-3 rounded-xl text-purple-300 leading-relaxed">
+                Equip real-time eyewear: Voyage Unisex Square Sunglasses. Preserve accurate facial anatomy, match ambient specular reflections on lenses, and cast realistic soft shadows onto temples and nose bridge.
+              </div>
+            </div>
+          </div>
+
+          <div class="pt-2 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
+            <span>LiveKit Room: <code class="text-slate-300 font-mono">room_vton_live_3821</code></span>
+            <span class="text-emerald-400 flex items-center gap-1">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Ready
+            </span>
+          </div>
+        </div>
+
+        <!-- Live Camera Simulation Preview -->
+        <div class="relative bg-slate-950 border border-slate-800 rounded-2xl overflow-hidden flex flex-col items-center justify-center min-h-[340px] p-4 text-center">
+          <video id="sim-video" autoplay playsinline muted class="w-full h-full object-cover rounded-xl" style="display:none;"></video>
+          
+          <div id="sim-placeholder" class="space-y-4 p-6">
+            <div class="w-14 h-14 rounded-full bg-purple-500/10 border border-purple-500/30 flex items-center justify-center mx-auto text-purple-400">
+              <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                <circle cx="12" cy="13" r="4"/>
+              </svg>
+            </div>
+            <div class="space-y-1">
+              <h4 class="text-sm font-semibold text-white">Live Camera Preview</h4>
+              <p class="text-xs text-slate-400 max-w-xs">Click "Launch Live Fitting" to open your webcam and test dynamic wearable tracking.</p>
+            </div>
+            <button 
+              id="btn-start-camera"
+              class="px-4 py-2 rounded-xl text-xs font-semibold bg-purple-600 hover:bg-purple-500 text-white shadow-md transition-all inline-flex items-center gap-1.5"
+            >
+              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <polygon points="5 3 19 12 5 21 5 3"/>
+              </svg>
+              Launch Live Fitting
+            </button>
+          </div>
+
+          <!-- Active Live Status Overlay -->
+          <div id="sim-active-overlay" class="hidden absolute top-3 left-3 right-3 flex items-center justify-between pointer-events-none">
+            <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+              LUCY V-TON 3.6 LIVE (30 FPS)
+            </span>
+            <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30">
+              Dual-Engine Active
+            </span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ROI & Business Metrics -->
+    <section id="roi" class="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div class="bg-slate-900/40 border border-slate-800 rounded-3xl p-8 space-y-3">
+        <div class="text-4xl font-extrabold bg-gradient-to-r from-pink-400 to-rose-400 bg-clip-text text-transparent">+320%</div>
+        <h3 class="text-lg font-bold text-white">Conversion Uplift</h3>
+        <p class="text-xs text-slate-400 leading-relaxed">
+          Shoppers who experience live video virtual try-on convert at 3.2x higher rates than traditional static product galleries.
+        </p>
+      </div>
+
+      <div class="bg-slate-900/40 border border-slate-800 rounded-3xl p-8 space-y-3">
+        <div class="text-4xl font-extrabold bg-gradient-to-r from-purple-400 to-indigo-400 bg-clip-text text-transparent">-42%</div>
+        <h3 class="text-lg font-bold text-white">Return Rate Reduction</h3>
+        <p class="text-xs text-slate-400 leading-relaxed">
+          Sizing uncertainty and style mismatch account for 70% of e-commerce apparel returns. Live fit checking eliminates guesswork.
+        </p>
+      </div>
+
+      <div class="bg-slate-900/40 border border-slate-800 rounded-3xl p-8 space-y-3">
+        <div class="text-4xl font-extrabold bg-gradient-to-r from-cyan-400 to-teal-400 bg-clip-text text-transparent">+84s</div>
+        <h3 class="text-lg font-bold text-white">Session Engagement</h3>
+        <p class="text-xs text-slate-400 leading-relaxed">
+          Shoppers spend an additional 1 minute 24 seconds interacting with products, trying complementary outfits, and sharing looks.
+        </p>
+      </div>
+    </section>
+
+    <!-- 1-Click Integration Code -->
+    <section id="integration" class="bg-slate-900/60 border border-slate-800 rounded-3xl p-8 space-y-6">
+      <div class="space-y-1">
+        <h2 class="text-2xl font-bold text-white">1-Minute Merchant Integration</h2>
+        <p class="text-xs text-slate-400">Add Stylera to any store by pasting a single snippet into your theme template.</p>
+      </div>
+
+      <div class="space-y-3">
+        <div class="flex items-center gap-2 border-b border-slate-800 pb-2">
+          <button class="tab-btn px-3 py-1 rounded-lg text-xs font-semibold bg-pink-500/20 text-pink-300 border border-pink-500/30" data-lang="shopify">
+            Shopify (theme.liquid)
+          </button>
+          <button class="tab-btn px-3 py-1 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-200" data-lang="html">
+            Custom HTML / Webflow
+          </button>
+          <button class="tab-btn px-3 py-1 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-200" data-lang="woo">
+            WooCommerce
+          </button>
+        </div>
+
+        <div class="relative">
+          <pre id="code-snippet" class="bg-slate-950 border border-slate-800 rounded-2xl p-4 text-xs font-mono text-slate-300 overflow-x-auto leading-relaxed"><code>&lt;!-- Stylera Real-Time V-TON Storefront Widget --&gt;
+&lt;script 
+  src="https://cdn.stylera.ai/stylera-embed.js" 
+  data-stylera-store="{{ shop.id }}" 
+  data-engine="hybrid" 
+  async&gt;
+&lt;/script&gt;</code></pre>
+          <button 
+            id="btn-copy"
+            class="absolute top-3 right-3 px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors"
+          >
+            Copy Snippet
+          </button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-800/80 bg-slate-950 py-8 text-center text-xs text-slate-500">
+    <p>© 2026 Stylera Inc. Real-Time Virtual Try-On for Modern E-Commerce.</p>
+  </footer>
+
+  <script>
+    // Simulator interactive script
+    const urlInput = document.getElementById('url-input');
+    const btnSimulate = document.getElementById('btn-simulate');
+    const btnSpinner = document.getElementById('btn-spinner');
+    const cardTitle = document.getElementById('card-title');
+    const cardBrand = document.getElementById('card-brand');
+    const cardPrice = document.getElementById('card-price');
+    const cardCategory = document.getElementById('card-category');
+    const cardImg = document.getElementById('card-img');
+    const cardPrompt = document.getElementById('card-prompt');
+
+    // Preset click handlers
+    document.querySelectorAll('.preset-chip').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const url = btn.getAttribute('data-url');
+        const cat = btn.getAttribute('data-cat');
+        const title = btn.getAttribute('data-title');
+        const brand = btn.getAttribute('data-brand');
+        const img = btn.getAttribute('data-img');
+
+        urlInput.value = url;
+        cardCategory.textContent = cat;
+        cardTitle.textContent = title;
+        cardBrand.textContent = 'Brand: ' + brand;
+        cardImg.src = img;
+        cardPrompt.textContent = cat === 'sunglasses'
+          ? `Equip real-time eyewear: ${title} by ${brand}. Match ambient reflections on lenses and calculate shadow projection.`
+          : `Substitute outfit with ${title} by ${brand}, preserving authentic textures, physical cloth folds and real-time movement.`;
+      });
+    });
+
+    btnSimulate.addEventListener('click', async () => {
+      const url = urlInput.value.trim();
+      if (!url) return;
+
+      btnSpinner.classList.remove('hidden');
+      btnSimulate.disabled = true;
+
+      try {
+        const res = await fetch('/api/v1/catalog/extract', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url })
+        });
+        if (res.ok) {
+          const json = await res.json();
+          if (json.data) {
+            const d = json.data;
+            cardTitle.textContent = d.title || 'Product';
+            cardBrand.textContent = 'Brand: ' + (d.brand || 'Store');
+            if (d.price) cardPrice.textContent = d.price;
+            if (d.primaryImage) cardImg.src = d.primaryImage;
+            cardCategory.textContent = d.category || 'fashion';
+            cardPrompt.textContent = d.recommendedPrompt || '';
+          }
+        }
+      } catch (e) {
+        console.warn('Backend offline or simulated response used');
+      } finally {
+        btnSpinner.classList.add('hidden');
+        btnSimulate.disabled = false;
+      }
+    });
+
+    // Camera launch
+    const btnStartCamera = document.getElementById('btn-start-camera');
+    const simVideo = document.getElementById('sim-video');
+    const simPlaceholder = document.getElementById('sim-placeholder');
+    const simActiveOverlay = document.getElementById('sim-active-overlay');
+
+    btnStartCamera.addEventListener('click', async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 } });
+        simVideo.srcObject = stream;
+        simVideo.style.display = 'block';
+        simPlaceholder.style.display = 'none';
+        simActiveOverlay.classList.remove('hidden');
+      } catch (err) {
+        alert('Could not access camera: ' + err.message);
+      }
+    });
+
+    // Copy Snippet
+    const btnCopy = document.getElementById('btn-copy');
+    const codeSnippet = document.getElementById('code-snippet');
+    btnCopy.addEventListener('click', () => {
+      navigator.clipboard.writeText(codeSnippet.innerText.trim());
+      btnCopy.textContent = 'Copied!';
+      setTimeout(() => btnCopy.textContent = 'Copy Snippet', 2000);
+    });
+  </script>
+</body>
+</html>
