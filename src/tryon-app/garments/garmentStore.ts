@@ -1,8 +1,9 @@
 import { create } from 'zustand';
 import { GarmentItem, GarmentCategory, FetchImageResponse } from '../../shared/types';
 import { APP_CONFIG } from '../../shared/constants';
-import { classifyMultiModal, extractTokensFromUrl } from './classifier';
+import { classifyMultiModal, classifyImageVisually, extractTokensFromUrl } from './classifier';
 import { removeBackgroundClient } from './bgRemoval';
+import { visionManager } from '../vision/visionManager';
 
 export interface IngestOptions {
   imageUrl: string;
@@ -30,6 +31,40 @@ interface GarmentStoreState {
   updateItemTransform: (id: string, updates: Partial<Pick<GarmentItem, 'scale' | 'offsetX' | 'offsetY' | 'rotation'>>) => void;
   updateCategory: (id: string, category: GarmentCategory) => void;
   updateProcessedImage: (id: string, newProcessedUrl: string) => void;
+}
+
+function loadImageToCanvas(dataUrl: string): Promise<HTMLCanvasElement | null> {
+  return new Promise((resolve) => {
+    if (typeof Image === 'undefined' || typeof document === 'undefined') {
+      resolve(null);
+      return;
+    }
+    const timer = setTimeout(() => resolve(null), 800);
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      clearTimeout(timer);
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.naturalWidth || img.width || 400;
+        canvas.height = img.naturalHeight || img.height || 400;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          resolve(canvas);
+          return;
+        }
+      } catch {
+        // fallback
+      }
+      resolve(null);
+    };
+    img.onerror = () => {
+      clearTimeout(timer);
+      resolve(null);
+    };
+    img.src = dataUrl;
+  });
 }
 
 function getImageNaturalDimensions(dataUrl: string): Promise<{ width: number; height: number }> {
@@ -102,18 +137,60 @@ export const useGarmentStore = create<GarmentStoreState>((set, get) => ({
       let confidence = opts.confidence ?? 0.9;
 
       if (!predictedCategory) {
-        // Calculate image aspect ratio for zero-shot geometric classification
-        const dims = await getImageNaturalDimensions(dataUrl);
-        const aspectRatio = dims.width / Math.max(1, dims.height);
-
         const textHints = `${opts.brand || ''} ${opts.title || ''} ${opts.categoryHint || ''}`.trim();
-        const classification = classifyMultiModal({
-          textHints,
-          url: opts.imageUrl,
-          aspectRatio,
-        });
-        predictedCategory = classification.category;
-        confidence = classification.confidence;
+        const canvas = await loadImageToCanvas(dataUrl);
+
+        if (canvas) {
+          // Zero-shot visual silhouette & foreground bounding box classifier
+          const classification = classifyImageVisually(canvas, textHints, opts.imageUrl);
+          predictedCategory = classification.category;
+          confidence = classification.confidence;
+
+          // Check if a human model face is wearing glasses in the image
+          try {
+            const faceLandmarks = await visionManager.detectFaceOnStaticImage(canvas);
+            if (faceLandmarks && faceLandmarks.length >= 468) {
+              const leftEye = faceLandmarks[33];
+              const rightEye = faceLandmarks[263];
+              const eyeSpan = Math.hypot((rightEye.x - leftEye.x) * canvas.width, (rightEye.y - leftEye.y) * canvas.height);
+
+              if (eyeSpan > 15) {
+                const ctx = canvas.getContext('2d');
+                if (ctx) {
+                  const leftData = ctx.getImageData(
+                    Math.max(0, Math.round(leftEye.x * canvas.width - eyeSpan * 0.15)),
+                    Math.max(0, Math.round(leftEye.y * canvas.height - eyeSpan * 0.15)),
+                    Math.max(2, Math.round(eyeSpan * 0.3)),
+                    Math.max(2, Math.round(eyeSpan * 0.3))
+                  );
+                  let avgEyeB = 0;
+                  for (let i = 0; i < leftData.data.length; i += 4) {
+                    avgEyeB += (leftData.data[i] + leftData.data[i + 1] + leftData.data[i + 2]) / 3;
+                  }
+                  avgEyeB /= Math.max(1, leftData.data.length / 4);
+
+                  if (avgEyeB < 140) {
+                    predictedCategory = 'sunglasses/eyeglasses';
+                    confidence = 0.98;
+                  }
+                }
+              }
+            }
+          } catch {
+            // face landmark analysis skipped
+          }
+        } else {
+          // Fallback when canvas context is unavailable
+          const dims = await getImageNaturalDimensions(dataUrl);
+          const aspectRatio = dims.width / Math.max(1, dims.height);
+          const classification = classifyMultiModal({
+            textHints,
+            url: opts.imageUrl,
+            aspectRatio,
+          });
+          predictedCategory = classification.category;
+          confidence = classification.confidence;
+        }
       }
 
       set({
@@ -180,9 +257,12 @@ export const useGarmentStore = create<GarmentStoreState>((set, get) => ({
       const reader = new FileReader();
       reader.onload = async () => {
         const dataUrl = reader.result as string;
+        const rawName = file.name.replace(/\.[^/.]+$/, '');
+        const cleanTitle = rawName.replace(/[\-_+.]/g, ' ').trim();
         const id = await get().ingestItemFromUrl({
           imageUrl: dataUrl,
-          title: file.name.replace(/\.[^/.]+$/, ''),
+          title: cleanTitle,
+          categoryHint: cleanTitle,
         });
         resolve(id);
       };
