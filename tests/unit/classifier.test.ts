@@ -4,6 +4,8 @@ import {
   extractTokensFromUrl,
   classifyFromImageAspect,
   classifyMultiModal,
+  extractObjectBoundingBox,
+  classifyImageVisually,
 } from '../../src/tryon-app/garments/classifier';
 import { runClassificationBenchmark } from '../../scripts/benchmark-classification';
 
@@ -87,5 +89,45 @@ describe('Zero-Shot Garment Classifier Tests', () => {
     });
     expect(result.category).toBe('sunglasses/eyeglasses');
     expect(result.confidence).toBeGreaterThanOrEqual(0.90);
+  });
+
+  it('should handle filenames with underscores, dashes and numbers correctly', () => {
+    const res1 = classifyGarment('voyage_unisex_square_sunglasses_58157mg2970');
+    expect(res1.category).toBe('sunglasses/eyeglasses');
+
+    const res2 = classifyGarment('mens_black_hoodie_oversized_fit.jpg');
+    expect(res2.category).toBe('hoodie/sweatshirt');
+
+    const res3 = classifyGarment('levis-501-straight-fit-jeans');
+    expect(res3.category).toBe('jeans/trousers/pants');
+  });
+
+  it('should not parse base64 data URLs as noise words in extractTokensFromUrl', () => {
+    const dataUrl = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQY';
+    const tokens = extractTokensFromUrl(dataUrl);
+    expect(tokens).toBe('');
+  });
+
+  it('should accurately extract object bounding box from square padded white image', () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 100;
+    canvas.height = 100; // raw canvas aspect ratio is 1.0 (square)
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      // Fill entire background with white
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, 100, 100);
+
+      // Draw horizontal dark rectangle in center (e.g. 80w x 25h = 3.2 aspect ratio)
+      ctx.fillStyle = '#101010';
+      ctx.fillRect(10, 38, 80, 24);
+
+      const bbox = extractObjectBoundingBox(canvas);
+      expect(bbox.aspectRatio).toBeGreaterThanOrEqual(2.5);
+
+      const visualRes = classifyImageVisually(canvas);
+      expect(visualRes.category).toBe('sunglasses/eyeglasses');
+      expect(visualRes.confidence).toBeGreaterThanOrEqual(0.90);
+    }
   });
 });

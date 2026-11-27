@@ -27,7 +27,7 @@ export const CATEGORY_KEYWORDS: Record<GarmentCategory, { primary: string[]; sec
   'top': {
     primary: ['crop top', 'peplum', 'blouse', 'blouses', 'cami', 'halter top', 'tank top', 'top', 'tops'],
     secondary: ['sleeveless', 'ruffled', 'floral top', 'corset'],
-    negative: ['laptop', 'table', 'low-top', 'high-top', 'shorts', 'jeans']
+    negative: ['laptop', 'table', 'low-top', 'high-top', 'low top', 'high top', 'sneakers', 'sneaker', 'shoes', 'shoe', 'footwear', 'shorts', 'jeans']
   },
   'dress': {
     primary: ['dress', 'dresses', 'maxi dress', 'midi dress', 'mini dress', 'gown', 'gowns', 'bodycon', 'frock', 'frocks', 'sheath'],
@@ -177,7 +177,7 @@ export const CATEGORY_KEYWORDS: Record<GarmentCategory, { primary: string[]; sec
  * -> "Voyage Men Square Sunglasses"
  */
 export function extractTokensFromUrl(url: string): string {
-  if (!url) return '';
+  if (!url || url.startsWith('data:')) return '';
   try {
     const decoded = decodeURIComponent(url);
     // Remove query parameters or hash for primary pathname inspection, but extract query values
@@ -207,13 +207,16 @@ export function extractTokensFromUrl(url: string): string {
 export function classifyGarment(textHints: string): ClassificationResult {
   // Normalize text hints
   let normalized = ` ${textHints.toLowerCase()} `;
-  normalized = normalized.replace(/\bt[\s-]+shirt\b/g, ' tshirt ');
-  normalized = normalized.replace(/\bt[\s-]+shirts\b/g, ' tshirt ');
-  normalized = normalized.replace(/\bsun[\s-]+glasses\b/g, ' sunglasses ');
-  normalized = normalized.replace(/\bsun[\s-]+glass\b/g, ' sunglass ');
-  normalized = normalized.replace(/\beye[\s-]+glasses\b/g, ' eyeglasses ');
-  normalized = normalized.replace(/\beye[\s-]+glass\b/g, ' eyeglass ');
-  normalized = normalized.replace(/\beye[\s-]+wear\b/g, ' eyewear ');
+  normalized = normalized.replace(/\bt[\s\-_]+shirt\b/g, ' tshirt ');
+  normalized = normalized.replace(/\bt[\s\-_]+shirts\b/g, ' tshirt ');
+  normalized = normalized.replace(/\bsun[\s\-_]+glasses\b/g, ' sunglasses ');
+  normalized = normalized.replace(/\bsun[\s\-_]+glass\b/g, ' sunglass ');
+  normalized = normalized.replace(/\beye[\s\-_]+glasses\b/g, ' eyeglasses ');
+  normalized = normalized.replace(/\beye[\s\-_]+glass\b/g, ' eyeglass ');
+  normalized = normalized.replace(/\beye[\s\-_]+wear\b/g, ' eyewear ');
+  // Replace underscores and special chars with spaces so regex \b matches words separated by underscores or dashes
+  normalized = normalized.replace(/[_/\-+.,:;&%#?()]/g, ' ');
+  normalized = ` ${normalized.replace(/\s+/g, ' ').trim()} `;
 
   const scores: Record<string, number> = {};
 
@@ -275,6 +278,281 @@ export function classifyGarment(textHints: string): ClassificationResult {
   };
 }
 
+export interface ObjectBoundingBox {
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+  width: number;
+  height: number;
+  aspectRatio: number;
+  foregroundPixelCount: number;
+  totalPixelCount: number;
+  fillRatio: number;
+}
+
+/**
+ * Extracts foreground object bounding box by eliminating solid white/light/transparent background borders.
+ * Resolves the issue where a square (1:1) product photo has wide sunglasses or tall pants inside.
+ */
+export function extractObjectBoundingBox(canvas: HTMLCanvasElement): ObjectBoundingBox {
+  const w = canvas.width;
+  const h = canvas.height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx || w === 0 || h === 0) {
+    return {
+      minX: 0,
+      maxX: w,
+      minY: 0,
+      maxY: h,
+      width: w,
+      height: h,
+      aspectRatio: w / Math.max(1, h),
+      foregroundPixelCount: 0,
+      totalPixelCount: w * h,
+      fillRatio: 1,
+    };
+  }
+
+  // Work on downscaled canvas for microsecond execution speed
+  let srcCanvas = canvas;
+  let scale = 1;
+  const maxDim = 200;
+  if (w > maxDim || h > maxDim) {
+    scale = maxDim / Math.max(w, h);
+    const smallCanvas = document.createElement('canvas');
+    smallCanvas.width = Math.max(1, Math.round(w * scale));
+    smallCanvas.height = Math.max(1, Math.round(h * scale));
+    const sCtx = smallCanvas.getContext('2d');
+    if (sCtx) {
+      sCtx.drawImage(canvas, 0, 0, smallCanvas.width, smallCanvas.height);
+      srcCanvas = smallCanvas;
+    }
+  }
+
+  const sw = srcCanvas.width;
+  const sh = srcCanvas.height;
+  const sCtx = srcCanvas.getContext('2d');
+  if (!sCtx) {
+    return {
+      minX: 0,
+      maxX: w,
+      minY: 0,
+      maxY: h,
+      width: w,
+      height: h,
+      aspectRatio: w / Math.max(1, h),
+      foregroundPixelCount: 0,
+      totalPixelCount: w * h,
+      fillRatio: 1,
+    };
+  }
+
+  const imgData = sCtx.getImageData(0, 0, sw, sh);
+  const data = imgData.data;
+
+  // Sample perimeter border corners to identify background color
+  const sampleIndices = [
+    0, // top-left
+    Math.max(0, (sw - 1) * 4), // top-right
+    Math.max(0, ((sh - 1) * sw) * 4), // bottom-left
+    Math.max(0, ((sh - 1) * sw + (sw - 1)) * 4), // bottom-right
+    Math.max(0, Math.floor(sw / 2) * 4), // top-center
+    Math.max(0, ((sh - 1) * sw + Math.floor(sw / 2)) * 4), // bottom-center
+  ];
+
+  let sumR = 0, sumG = 0, sumB = 0, sumA = 0;
+  let validBorderSamples = 0;
+
+  for (const idx of sampleIndices) {
+    if (idx + 3 < data.length) {
+      sumR += data[idx];
+      sumG += data[idx + 1];
+      sumB += data[idx + 2];
+      sumA += data[idx + 3];
+      validBorderSamples++;
+    }
+  }
+
+  const bgR = validBorderSamples > 0 ? Math.round(sumR / validBorderSamples) : 255;
+  const bgG = validBorderSamples > 0 ? Math.round(sumG / validBorderSamples) : 255;
+  const bgB = validBorderSamples > 0 ? Math.round(sumB / validBorderSamples) : 255;
+  const bgA = validBorderSamples > 0 ? Math.round(sumA / validBorderSamples) : 255;
+
+  const isBgTransparent = bgA < 45;
+
+  let minX = sw, maxX = 0, minY = sh, maxY = 0;
+  let fgPixels = 0;
+
+  for (let y = 0; y < sh; y++) {
+    for (let x = 0; x < sw; x++) {
+      const idx = (y * sw + x) * 4;
+      const r = data[idx];
+      const g = data[idx + 1];
+      const b = data[idx + 2];
+      const a = data[idx + 3];
+
+      let isFg = false;
+      if (isBgTransparent) {
+        isFg = a > 35;
+      } else {
+        const diff = Math.abs(r - bgR) + Math.abs(g - bgG) + Math.abs(b - bgB);
+        isFg = a > 40 && diff > 24;
+      }
+
+      if (isFg) {
+        fgPixels++;
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
+    }
+  }
+
+  // If entire image was deemed background or solid color
+  if (fgPixels < 15 || minX > maxX || minY > maxY) {
+    return {
+      minX: 0,
+      maxX: w,
+      minY: 0,
+      maxY: h,
+      width: w,
+      height: h,
+      aspectRatio: w / Math.max(1, h),
+      foregroundPixelCount: fgPixels,
+      totalPixelCount: w * h,
+      fillRatio: 1,
+    };
+  }
+
+  // Map back to full-res coordinates
+  const fullMinX = Math.floor(minX / scale);
+  const fullMaxX = Math.min(w, Math.ceil(maxX / scale));
+  const fullMinY = Math.floor(minY / scale);
+  const fullMaxY = Math.min(h, Math.ceil(maxY / scale));
+
+  const fgW = Math.max(1, fullMaxX - fullMinX + 1);
+  const fgH = Math.max(1, fullMaxY - fullMinY + 1);
+  const objAspectRatio = fgW / fgH;
+
+  return {
+    minX: fullMinX,
+    maxX: fullMaxX,
+    minY: fullMinY,
+    maxY: fullMaxY,
+    width: fgW,
+    height: fgH,
+    aspectRatio: Math.round(objAspectRatio * 100) / 100,
+    foregroundPixelCount: fgPixels,
+    totalPixelCount: sw * sh,
+    fillRatio: fgPixels / (sw * sh),
+  };
+}
+
+/**
+ * Analyzes silhouette profile to detect dual lenses (eyewear), shoe sole, leg split (pants)
+ */
+export function analyzeForegroundGeometry(
+  canvas: HTMLCanvasElement,
+  bbox: ObjectBoundingBox
+): {
+  isEyewearDualLens: boolean;
+  isPantsLegSplit: boolean;
+  isFootwearSole: boolean;
+} {
+  const ctx = canvas.getContext('2d');
+  if (!ctx || bbox.width < 10 || bbox.height < 10) {
+    return { isEyewearDualLens: false, isPantsLegSplit: false, isFootwearSole: false };
+  }
+
+  const { minX, minY, width, height } = bbox;
+  const gridW = 40;
+  const gridH = 40;
+
+  const smallCanvas = document.createElement('canvas');
+  smallCanvas.width = gridW;
+  smallCanvas.height = gridH;
+  const sCtx = smallCanvas.getContext('2d');
+  if (!sCtx) return { isEyewearDualLens: false, isPantsLegSplit: false, isFootwearSole: false };
+
+  sCtx.drawImage(canvas, minX, minY, width, height, 0, 0, gridW, gridH);
+  const imgData = sCtx.getImageData(0, 0, gridW, gridH);
+  const data = imgData.data;
+
+  // Compute column density and row density
+  const colDensity = new Float32Array(gridW);
+  const rowDensity = new Float32Array(gridH);
+
+  for (let y = 0; y < gridH; y++) {
+    for (let x = 0; x < gridW; x++) {
+      const idx = (y * gridW + x) * 4;
+      const alpha = data[idx + 3];
+      const diff = 765 - (data[idx] + data[idx + 1] + data[idx + 2]);
+      if (alpha > 40 && diff > 30) {
+        colDensity[x]++;
+        rowDensity[y]++;
+      }
+    }
+  }
+
+  // 1. Dual-Lens Eyewear Check:
+  // Left lens (cols 6 to 16), Center bridge (cols 17 to 23), Right lens (cols 24 to 34)
+  let leftLensDensity = 0;
+  let centerBridgeDensity = 0;
+  let rightLensDensity = 0;
+
+  for (let x = 6; x <= 16; x++) leftLensDensity += colDensity[x];
+  for (let x = 17; x <= 23; x++) centerBridgeDensity += colDensity[x];
+  for (let x = 24; x <= 34; x++) rightLensDensity += colDensity[x];
+
+  leftLensDensity /= 11;
+  centerBridgeDensity /= 7;
+  rightLensDensity /= 11;
+
+  // Eyewear has a distinct bridge dip in the center (center density is <= 70% of lens density)
+  // and aspect ratio is wide (>= 1.40)
+  const isEyewearDualLens =
+    bbox.aspectRatio >= 1.40 &&
+    leftLensDensity > 5 &&
+    rightLensDensity > 5 &&
+    centerBridgeDensity <= Math.max(leftLensDensity, rightLensDensity) * 0.72;
+
+  // 2. Pants Leg-Split Check:
+  let legSplitDetected = false;
+  if (bbox.aspectRatio <= 0.75) {
+    let splitRows = 0;
+    for (let y = 22; y <= 36; y++) {
+      let centerColEmpty = true;
+      for (let x = 17; x <= 23; x++) {
+        const idx = (y * gridW + x) * 4;
+        const diff = 765 - (data[idx] + data[idx + 1] + data[idx + 2]);
+        if (data[idx + 3] > 40 && diff > 30) {
+          centerColEmpty = false;
+          break;
+        }
+      }
+      if (centerColEmpty) splitRows++;
+    }
+    legSplitDetected = splitRows >= 5;
+  }
+
+  // 3. Footwear Sole Check:
+  let footwearSole = false;
+  if (bbox.aspectRatio >= 1.15 && bbox.aspectRatio <= 2.20) {
+    let bottomDensity = 0;
+    for (let y = 32; y < gridH; y++) bottomDensity += rowDensity[y];
+    bottomDensity /= (gridH - 32);
+    footwearSole = bottomDensity > gridW * 0.55;
+  }
+
+  return {
+    isEyewearDualLens,
+    isPantsLegSplit: legSplitDetected,
+    isFootwearSole: footwearSole,
+  };
+}
+
 /**
  * Geometric aspect ratio & silhouette heuristic classifier
  * Zero-shot computer vision fallback when text metadata is missing or ambiguous
@@ -282,13 +560,12 @@ export function classifyGarment(textHints: string): ClassificationResult {
 export function classifyFromImageAspect(aspectRatio: number, textHints = ''): ClassificationResult | null {
   if (!aspectRatio || isNaN(aspectRatio) || aspectRatio <= 0) return null;
 
-  // Eyewear has a distinct wide aspect ratio: width is significantly larger than height (1.55 to 3.5)
-  // Fashion items like shirts (0.8 - 1.1) or jeans (0.4 - 0.7) are never this wide in product photos
-  if (aspectRatio >= 1.55) {
+  // Eyewear has a distinct wide aspect ratio: width is significantly larger than height (1.45 to 4.0)
+  if (aspectRatio >= 1.45) {
     return {
       category: 'sunglasses/eyeglasses',
       confidence: 0.95,
-      allScores: { 'sunglasses/eyeglasses': 25 },
+      allScores: { 'sunglasses/eyeglasses': 30 },
       source: 'aspect_ratio',
     };
   }
@@ -316,7 +593,7 @@ export function classifyFromImageAspect(aspectRatio: number, textHints = ''): Cl
     };
   }
 
-  // Slightly wide items (1.20 - 1.52): Shoes / Footwear or Cap / Hat
+  // Slightly wide items (1.20 - 1.54): Shoes / Footwear or Cap / Hat
   if (aspectRatio >= 1.20 && aspectRatio <= 1.54) {
     if (/cap|hat|beanie|headwear/i.test(textHints)) {
       return {
@@ -338,13 +615,97 @@ export function classifyFromImageAspect(aspectRatio: number, textHints = ''): Cl
 }
 
 /**
- * Multi-Modal Classifier combining text hints, URL tokens, and visual aspect ratio
+ * Complete Zero-Shot Visual & Geometric Classifier
+ * Works on any raw or cropped input image, base64 dataUrl, or canvas
+ */
+export function classifyImageVisually(
+  canvas: HTMLCanvasElement,
+  textHints?: string,
+  url?: string
+): ClassificationResult {
+  // 1. Check text & URL tokens first
+  const urlTokens = url ? extractTokensFromUrl(url) : '';
+  const combinedText = `${textHints || ''} ${urlTokens}`.trim();
+
+  if (combinedText.length > 0) {
+    const textResult = classifyGarment(combinedText);
+    const topScore = textResult.allScores[textResult.category] || 0;
+    // If text has strong confident primary keyword, trust text
+    if (topScore >= 10) {
+      return { ...textResult, source: 'multimodal' };
+    }
+  }
+
+  // 2. Extract trimmed foreground object bounding box (eliminates canvas border padding)
+  const bbox = extractObjectBoundingBox(canvas);
+  const geo = analyzeForegroundGeometry(canvas, bbox);
+
+  // 3. Dual-lens eyewear detection (highest precision for sunglasses/eyeglasses)
+  if (geo.isEyewearDualLens || bbox.aspectRatio >= 1.45) {
+    return {
+      category: 'sunglasses/eyeglasses',
+      confidence: geo.isEyewearDualLens ? 0.98 : 0.92,
+      allScores: { 'sunglasses/eyeglasses': 35 },
+      source: 'aspect_ratio',
+    };
+  }
+
+  // 4. Pants leg-split detection
+  if (geo.isPantsLegSplit || bbox.aspectRatio <= 0.60) {
+    return {
+      category: 'jeans/trousers/pants',
+      confidence: geo.isPantsLegSplit ? 0.95 : 0.88,
+      allScores: { 'jeans/trousers/pants': 30 },
+      source: 'aspect_ratio',
+    };
+  }
+
+  // 5. Footwear sole detection
+  if (geo.isFootwearSole || (bbox.aspectRatio >= 1.25 && bbox.aspectRatio <= 1.85 && /shoe|foot|sneaker|heel/i.test(combinedText))) {
+    return {
+      category: 'shoes/sneakers/heels/sandals',
+      confidence: geo.isFootwearSole ? 0.92 : 0.85,
+      allScores: { 'shoes/sneakers/heels/sandals': 28 },
+      source: 'aspect_ratio',
+    };
+  }
+
+  // 6. Secondary text check
+  if (combinedText.length > 0) {
+    const textResult = classifyGarment(combinedText);
+    if ((textResult.allScores[textResult.category] || 0) > 0) {
+      return textResult;
+    }
+  }
+
+  // 7. General aspect ratio fallbacks
+  const aspectResult = classifyFromImageAspect(bbox.aspectRatio, combinedText);
+  if (aspectResult) {
+    return aspectResult;
+  }
+
+  // Default fallback
+  return {
+    category: 't-shirt',
+    confidence: 0.50,
+    allScores: { 't-shirt': 1 },
+    source: 'multimodal',
+  };
+}
+
+/**
+ * Multi-Modal Classifier combining text hints, URL tokens, visual aspect ratio, and optional canvas
  */
 export function classifyMultiModal(params: {
   textHints?: string;
   url?: string;
   aspectRatio?: number;
+  canvas?: HTMLCanvasElement;
 }): ClassificationResult {
+  if (params.canvas) {
+    return classifyImageVisually(params.canvas, params.textHints, params.url);
+  }
+
   const urlTokens = params.url ? extractTokensFromUrl(params.url) : '';
   const combinedText = `${params.textHints || ''} ${urlTokens}`.trim();
 
