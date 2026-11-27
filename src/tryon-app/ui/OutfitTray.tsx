@@ -5,6 +5,35 @@ import { GARMENT_CATEGORIES } from '../../shared/constants';
 import { GarmentCategory } from '../../shared/types';
 import { GarmentCropModal } from './GarmentCropModal';
 
+const CATEGORY_EMOJIS: Record<string, string> = {
+  'sunglasses/eyeglasses': '🕶️',
+  't-shirt': '👕',
+  'shirt': '👔',
+  'kurta': '🥻',
+  'top': '👚',
+  'dress': '👗',
+  'hoodie/sweatshirt': '🧥',
+  'jacket/coat/blazer': '🧥',
+  'jeans/trousers/pants': '👖',
+  'shorts': '🩳',
+  'skirt': '👗',
+  'saree/ethnic wear': '🥻',
+  'shoes/sneakers/heels/sandals': '👟',
+  'cap/hat/beanie': '🧢',
+  'face mask': '😷',
+  'watch': '⌚',
+  'bracelet/bangle': '📿',
+  'necklace/chain/pendant': '📿',
+  'earrings': '✨',
+  'ring': '💍',
+  'scarf/stole': '🧣',
+  'belt': '🎗️',
+  'bag/backpack': '🎒',
+  'tie/bow tie': '👔',
+  'gloves': '🧤',
+  'socks': '🧦',
+};
+
 export const OutfitTray: React.FC = () => {
   const {
     items,
@@ -184,10 +213,19 @@ export const OutfitTray: React.FC = () => {
                 </button>
               </div>
 
-              {/* Category indicator pill */}
-              <div className="absolute bottom-0 inset-x-0 bg-slate-950/90 text-[8px] text-center font-medium text-slate-300 py-0.5 truncate px-1">
-                {item.category.split('/')[0]}
-              </div>
+              {/* Category indicator pill with quick-click tuning toggle */}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setActiveItem(item.id);
+                  setShowTuning(true);
+                }}
+                title={`Category: ${item.category} (${Math.round(item.confidence * 100)}% match). Click to change.`}
+                className="absolute bottom-0 inset-x-0 bg-slate-950/90 hover:bg-pink-950/90 text-[8px] text-center font-medium text-slate-200 py-0.5 truncate px-1 border-t border-slate-800 flex items-center justify-center gap-0.5 transition-colors"
+              >
+                <span>{CATEGORY_EMOJIS[item.category] || '✨'}</span>
+                <span className="truncate">{item.category.split('/')[0]}</span>
+              </button>
             </div>
           );
         })}
